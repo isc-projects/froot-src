@@ -24,18 +24,18 @@ public:
 
 class Zone {
 
+	ldns_dnssec_zone*	zone;
+
 	typedef std::map<std::string, const NameData&> Data;
 	Data data;
 
 private:
-	void add_name(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone);
-	void build(const ldns_dnssec_zone* zone);
+	void add_name(const ldns_dnssec_name* name);
+	void build_answers();
 
 public:
 	void load(const std::string& filename);
-
-	int lookup(const std::string& qname, uint16_t qtype) const;
-	int lookup(const uint8_t* buffer, size_t len) const;
+	int lookup(const std::string& qname) const;
 
 public:
 	Zone();

@@ -5,7 +5,7 @@ CXXFLAGS = -O3 -std=c++11 -Wall -Werror $(INCS)
 LDFLAGS =
 
 BIN = root-server
-OBJS = main.o zone.o timer.o datafile.o query.o util.o
+OBJS = main.o server.o zone.o timer.o datafile.o query.o util.o
 LIBS += -lresolv
 
 .PHONY:	all clean

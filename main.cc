@@ -1,18 +1,19 @@
 #include <cstdlib>
 #include <iostream>
+#include <map>
 
-#include "zone.h"
+#include "server.h"
 #include "datafile.h"
 #include "timer.h"
 
 int app(int argc, char *argv[])
 {
-	Zone root;
+	Server server;
 	Datafile queries;
 
 	{
 		BenchmarkTimer t("load zone");
-		root.load("root.zone");
+		server.load("root.zone");
 	}
 
 	{
@@ -20,15 +21,19 @@ int app(int argc, char *argv[])
 		queries.read_raw("default.raw");
 	}
 
-	uint64_t res = 0;
+	std::map<int, uint64_t> rcodes;
 	{
 		BenchmarkTimer t("1M queries");
-		for (size_t i = 0; i < 1e6; ++i) {
-			auto q = queries[i];
-			res += root.lookup(q.data(), q.size());
+		for (size_t i = 0; i < 1e7; ++i) {
+			auto& q = queries[i];
+			auto rcode = server.query(q.data(), q.size());
+			++rcodes[rcode];
 		}
 	}
-	std::cerr << res << std::endl;
+
+	for (const auto it: rcodes) {
+		std::cerr << it.first << " : " << it.second << std::endl;
+	}
 
 	return 0;
 }
