@@ -3,23 +3,21 @@
 
 #include "util.h"
 
-void throw_errno(const std::string& what)
+// potentially branchless conversion to lower-case
+uint8_t lower(uint8_t c)
 {
-	throw std::system_error(errno, std::system_category(), what);
-}
-
-static uint8_t lower(uint8_t c)
-{
-	if (c < 'A' || c > 'Z') {
-		return c;
-	} else {
-		return c | 0x20;
-	}
+	return c | ((c >= 'A' && c <= 'Z') * 0x20);
 }
 
 std::string strlower(const uint8_t* p, size_t n)
 {
 	std::string result;
-	std::transform(p, p + n, std::back_inserter(result), lower);
+	result.resize(n);
+	std::transform(p, p + n, result.begin(), lower);
 	return result;
+}
+
+void throw_errno(const std::string& what)
+{
+	throw std::system_error(errno, std::system_category(), what);
 }

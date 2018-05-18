@@ -48,7 +48,7 @@ void Zone::add_name(const ldns_dnssec_name* name)
 	std::string key = strlower(p, len);
 	free(str);
 
-	data.emplace(std::move(key), NameData(name, zone));
+	data.emplace_hint(data.end(), std::move(key), NameData(name, zone));
 }
 
 void Zone::build_answers()
@@ -83,14 +83,11 @@ void Zone::load(const std::string& filename)
 	build_answers();
 }
 
-int Zone::lookup(const std::string& qname) const
+Zone::Data::const_iterator Zone::lookup(const std::string& qname, bool& matched) const
 {
 	auto itr = data.lower_bound(qname);
-	if (itr->first == qname) {
-		return 0;
-	} else  {
-		return 3;
-	}
+	matched = (itr->first == qname);
+	return itr;
 }
 
 Zone::Zone()

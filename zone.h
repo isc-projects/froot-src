@@ -5,7 +5,21 @@
 
 #include <ldns/dnssec.h>
 
+/*
+	<= 512 positive
+	<= 512 negative
+
+	EDNS positive
+	EDNS negative
+
+	EDNS + DO positive
+	EDNS + DO negative
+
+	+ TC variants
+*/
+
 class NameData {
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-private-field"
 	ldns_rr_list*		ns;
@@ -24,9 +38,11 @@ public:
 
 class Zone {
 
-	ldns_dnssec_zone*	zone;
-
+public:
 	typedef std::map<std::string, const NameData&> Data;
+
+private:
+	ldns_dnssec_zone*	zone;
 	Data data;
 
 private:
@@ -35,7 +51,7 @@ private:
 
 public:
 	void load(const std::string& filename);
-	int lookup(const std::string& qname) const;
+	Data::const_iterator lookup(const std::string& qname, bool& match) const;
 
 public:
 	Zone();

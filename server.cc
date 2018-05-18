@@ -1,43 +1,55 @@
+#include <iostream>
+
 #include <arpa/inet.h>
 #include "server.h"
 #include "util.h"
-
-Server::Server()
-{
-}
-
-Server::~Server()
-{
-}
 
 void Server::load(const std::string& filename)
 {
 	zone.load(filename);
 }
 
-int Server::query(const uint8_t* buffer, size_t len) const
+static bool valid_header(const uint8_t* buffer, size_t len)
 {
-	if (len < 17) {				// 12 + 1 + 2 + 2
-		return LDNS_RCODE_FORMERR;
+	// minimum packet length = 12 + 1 + 2 + 2
+	if (len < 17) {
+		return false;
 	}
 
 	auto w = reinterpret_cast<const uint16_t *>(buffer);
 
+	// OPCODE = 0 && RCODE == 0
+	if ((ntohs(w[1]) & 0x780f) != 0) {
+		return false;
+	}
+
+	// QDCOUNT == 1
+	if (htons(w[2]) != 1) {
+		return false;
+	}
+
+	// ANCOUNT == 0 && NSCOUNT == 0
+	auto l = reinterpret_cast<const uint32_t *>(buffer + 6);
+	if (*l) {
+		return false;
+	}
+
+	// ARCOUNT <= 1
+	if (htons(w[5]) > 1) {
+		return false;
+	}
+
+	return true;
+}
+
+int Server::query(const uint8_t* buffer, size_t len) const
+{
+	if (!valid_header(buffer, len)) {
+		return LDNS_RCODE_FORMERR;
+	}
+
 	if (buffer[2] & 0x80) {			// QR == 0
 		return LDNS_RCODE_FORMERR;	// should just drop
-	}
-
-	if ((ntohs(w[1]) & 0x780f) != 0) {	// OPCODE = 0 && RCODE == 0
-		return LDNS_RCODE_FORMERR;
-	}
-
-	if (w[2] != htons(1)) {			// QDCOUNT == 1
-		return LDNS_RCODE_FORMERR;
-	}
-
-	auto l = reinterpret_cast<const uint32_t *>(w + 3);
-	if (*l) {				// ANCOUNT == 0 && NSCOUNT == 0
-		return LDNS_RCODE_FORMERR;
 	}
 
 	size_t offset = 12;
@@ -71,5 +83,20 @@ int Server::query(const uint8_t* buffer, size_t len) const
 	// make lower cased qname
 	auto qname = strlower(&buffer[last], qlen);
 
-	return zone.lookup(qname);
+	bool match = false;
+	auto iter = zone.lookup(qname, match);
+
+	if (!match) {
+		--iter;
+	}
+
+	return match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
+}
+
+Server::Server()
+{
+}
+
+Server::~Server()
+{
 }
