@@ -42,7 +42,7 @@ public:
 	typedef std::map<std::string, const NameData&> Data;
 
 private:
-	ldns_dnssec_zone*	zone;
+	ldns_dnssec_zone*	zone = nullptr;
 	Data data;
 
 private:

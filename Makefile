@@ -1,7 +1,7 @@
-INCS = $(shell pkg-config libldns --cflags)
-LIBS = $(shell pkg-config libldns --libs)
+INCS = $(shell pkg-config ldns --cflags)
+LIBS = $(shell pkg-config ldns --libs)
 
-CXXFLAGS = -O3 -std=c++11 -Wall -Werror $(INCS)
+CXXFLAGS = -O0 -std=c++11 -Wall -Werror -Wno-error=pragmas $(INCS)
 LDFLAGS =
 
 BIN = root-server

@@ -73,7 +73,7 @@ void Zone::load(const std::string& filename)
 	auto fp = fopen(filename.c_str(), "r");
 	auto status = ldns_dnssec_zone_new_frm_fp(&zone, fp, origin, 3600, LDNS_RR_CLASS_IN);
 	fclose(fp);
-	ldns_rdf_free(origin);
+	ldns_rdf_deep_free(origin);
 
 	if (status != LDNS_STATUS_OK) {
 		throw std::runtime_error("zone load failed");

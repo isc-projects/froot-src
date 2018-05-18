@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <system_error>
 #include <cerrno>
 
