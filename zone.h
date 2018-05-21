@@ -20,13 +20,12 @@
 
 class NameData {
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-private-field"
+#if 0
 	ldns_rr_list*		ns;
 	ldns_rr_list*		ds;
 	ldns_rr_list*		glue_a;
 	ldns_rr_list*		glue_aaaa;
-#pragma GCC diagnostic pop
+#endif
 	ldns_rr*		nsec;
 	ldns_rr_list*		nsec_sigs;
 

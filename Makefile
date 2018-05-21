@@ -1,18 +1,21 @@
 INCS = $(shell pkg-config ldns --cflags)
 LIBS = $(shell pkg-config ldns --libs)
 
-CXXFLAGS = -O0 -std=c++11 -Wall -Werror -Wno-error=pragmas $(INCS)
+CXXFLAGS = -O3 -std=c++11 -Wall -Werror -Wno-error=pragmas $(INCS)
 LDFLAGS =
 
-BIN = root-server
-OBJS = main.o server.o zone.o timer.o datafile.o query.o util.o
+BIN = lightning
+OBJS = server.o zone.o packet.o timer.o datafile.o query.o util.o
 LIBS += -lresolv
 
 .PHONY:	all clean
 
 all: $(BIN)
 
-$(BIN):	$(OBJS)
+$(BIN):	main.o $(OBJS)
+	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
+
+benchmark: benchmark.o $(OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
 clean:

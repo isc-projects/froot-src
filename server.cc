@@ -1,6 +1,11 @@
 #include <iostream>
+#include <functional>
 
 #include <arpa/inet.h>
+#include <netinet/ip.h>
+#include <netinet/ip6.h>
+#include <netinet/udp.h>
+
 #include "server.h"
 #include "util.h"
 
@@ -91,6 +96,75 @@ int Server::query(const uint8_t* buffer, size_t len) const
 	}
 
 	return match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
+}
+
+void Server::handle_packet_udp(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
+{
+	// UDP header too short
+	if (buflen < sizeof(udphdr)) return;
+
+	auto& udp = *reinterpret_cast<udphdr*>(buffer);
+	if (udp.uh_dport != htons(53)) return;
+
+	buffer += sizeof udp;
+	buflen -= sizeof udp;
+
+	(void) query(buffer, buflen);
+}
+
+void Server::handle_packet_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
+{
+	// IP header too short
+	if (buflen < sizeof(iphdr)) return;
+
+	auto& ip = *reinterpret_cast<iphdr*>(buffer);
+	if (ip.protocol != IPPROTO_UDP) return;
+
+	// move to UDP header
+	auto ihl = 4 * ip.ihl;
+	buffer += ihl;
+	buflen -= ihl;
+
+	return handle_packet_udp(s, buffer, buflen, addr, userdata);
+}
+
+void Server::handle_packet_ipv6(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
+{
+}
+
+void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
+{
+	// empty frame
+	if (!buflen) return;
+
+	auto version = (buffer[0] >> 4) & 0x0f;
+	if (version == 4) {
+		handle_packet_ipv4(s, buffer, buflen, addr, userdata);
+	} else if (version == 6) {
+		handle_packet_ipv6(s, buffer, buflen, addr, userdata);
+	}
+}
+
+void Server::loop(PacketSocket& s)
+{
+	using namespace std::placeholders;
+	PacketSocket::rx_callback_t callback = std::bind(&Server::handle_packet, this, _1, _2, _3, _4, _5);
+	while (true) {
+		s.rx_ring_next(callback, -1, nullptr);
+	}
+}
+
+void Server::worker(const std::string& ifname)
+{
+	try {
+		PacketSocket socket;
+		socket.open();
+		socket.bind(ifname);
+		socket.rx_ring_enable(11, 128);	// frame size = 2048
+		loop(socket);
+	} catch (std::exception& e) {
+		std::cerr << "worker error: " << e.what() << std::endl;
+	}
 }
 
 Server::Server()
