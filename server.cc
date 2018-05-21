@@ -47,7 +47,7 @@ static bool valid_header(const uint8_t* buffer, size_t len)
 	return true;
 }
 
-int Server::query(const uint8_t* buffer, size_t len) const
+int Server::query(const uint8_t* buffer, size_t len, Response::Chunk& answer) const
 {
 	if (!valid_header(buffer, len)) {
 		return LDNS_RCODE_FORMERR;
@@ -98,7 +98,17 @@ int Server::query(const uint8_t* buffer, size_t len) const
 	return match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
 }
 
-void Server::handle_packet_udp(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
+void Server::handle_packet_dns(Response& response, uint8_t* buffer, size_t buflen)
+{
+	Response::Chunk answer;
+
+	(void) query(buffer, buflen, answer);
+
+	response.append(answer);
+	response.send();
+}
+
+void Server::handle_packet_udp(Response& response, uint8_t* buffer, size_t buflen)
 {
 	// UDP header too short
 	if (buflen < sizeof(udphdr)) return;
@@ -109,10 +119,10 @@ void Server::handle_packet_udp(PacketSocket& s, uint8_t* buffer, size_t buflen, 
 	buffer += sizeof udp;
 	buflen -= sizeof udp;
 
-	(void) query(buffer, buflen);
+	handle_packet_dns(response, buffer, buflen);
 }
 
-void Server::handle_packet_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
+void Server::handle_packet_ipv4(Response& response, uint8_t* buffer, size_t buflen)
 {
 	// IP header too short
 	if (buflen < sizeof(iphdr)) return;
@@ -125,10 +135,10 @@ void Server::handle_packet_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen,
 	buffer += ihl;
 	buflen -= ihl;
 
-	return handle_packet_udp(s, buffer, buflen, addr, userdata);
+	handle_packet_udp(response, buffer, buflen);
 }
 
-void Server::handle_packet_ipv6(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
+void Server::handle_packet_ipv6(Response& response, uint8_t* buffer, size_t buflen)
 {
 }
 
@@ -137,11 +147,13 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	// empty frame
 	if (!buflen) return;
 
+	Response response(s, addr);
+
 	auto version = (buffer[0] >> 4) & 0x0f;
 	if (version == 4) {
-		handle_packet_ipv4(s, buffer, buflen, addr, userdata);
+		handle_packet_ipv4(response, buffer, buflen);
 	} else if (version == 6) {
-		handle_packet_ipv6(s, buffer, buflen, addr, userdata);
+		handle_packet_ipv6(response, buffer, buflen);
 	}
 }
 

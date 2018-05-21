@@ -5,7 +5,7 @@ CXXFLAGS = -O3 -std=c++11 -Wall -Werror -Wno-error=pragmas $(INCS)
 LDFLAGS =
 
 BIN = lightning
-OBJS = server.o zone.o packet.o timer.o datafile.o query.o util.o
+OBJS = server.o zone.o packet.o response.o timer.o datafile.o query.o util.o
 LIBS += -lresolv
 
 .PHONY:	all clean
