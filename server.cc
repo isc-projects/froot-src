@@ -12,12 +12,21 @@
 #include "server.h"
 #include "util.h"
 
+struct dnshdr {
+	uint16_t	id;
+	uint16_t	flags;
+	uint16_t	qdcount;
+	uint16_t	ancount;
+	uint16_t	nscount;
+	uint16_t	arcount;
+};
+
 void Server::load(const std::string& filename)
 {
 	zone.load(filename);
 }
 
-static bool valid_header(const Buffer& in)
+static bool legal_header(const Buffer& in)
 {
 	// minimum packet length = 12 + 1 + 2 + 2
 	if (in.available() < 17) {
@@ -33,29 +42,25 @@ static bool valid_header(const Buffer& in)
 	return true;
 }
 
-static bool valid_format(const Buffer& in)
+static bool valid_header(const dnshdr& h)
 {
-	auto b = in.current();
-	auto w = reinterpret_cast<const uint16_t *>(b);
-
 	// RCODE == 0
-	if ((ntohs(w[1]) & 0x000f) != 0) {
+	if ((ntohs(h.flags) & 0x000f) != 0) {
 		return false;
 	}
 
 	// QDCOUNT == 1
-	if (htons(w[2]) != 1) {
+	if (htons(h.qdcount) != 1) {
 		return false;
 	}
 
 	// ANCOUNT == 0 && NSCOUNT == 0
-	auto l = reinterpret_cast<const uint32_t *>(b + 6);
-	if (*l) {
+	if (h.ancount || h.nscount) {
 		return false;
 	}
 
 	// ARCOUNT <= 1
-	if (htons(w[5]) > 1) {
+	if (htons(h.arcount) > 1) {
 		return false;
 	}
 
@@ -64,10 +69,10 @@ static bool valid_format(const Buffer& in)
 
 int Server::query(Buffer& in, size_t& qdsize) const
 {
-	uint8_t* p = in.current();
+	auto p = in.current();
 	auto len = in.available();
 
-	size_t offset = 12;
+	size_t offset = 0;
 	auto last = offset;
 
 	uint8_t c;
@@ -77,7 +82,7 @@ int Server::query(Buffer& in, size_t& qdsize) const
 		}
 		last = offset;
 		offset += c;
-		if (offset > len - 4 || offset > (255 + 12)) {
+		if (offset > len - 4 || offset > 255) {
 			return LDNS_RCODE_FORMERR;
 		}
 	}
@@ -99,7 +104,7 @@ int Server::query(Buffer& in, size_t& qdsize) const
 	(void) in.reserve(offset);
 
 	// determine question section length for copying
-	qdsize = offset - 12;
+	qdsize = offset;
 
 	// make lower cased qname
 	auto qname = strlower(&p[last], qname_length);
@@ -120,18 +125,20 @@ bool Server::handle_packet_dns(Buffer& in, Buffer& out)
 	hexdump(std::cerr, in.current(), in.available());
 
 	// drop invalid packets
-	if (!valid_header(in)) {
+	if (!legal_header(in)) {
 		return false;
 	}
 
 	uint16_t rcode;
 	size_t qdsize = 0;
-	auto header = in.current();
 
-	if (!valid_format(in)) {
+	auto rx_hdr = in.reserve_ref<dnshdr>();
+	auto qdstart = in.current();
+
+	if (!valid_header(rx_hdr)) {
 		rcode = LDNS_RCODE_FORMERR;
 	} else {
-		uint8_t opcode = (header[2] >> 3) & 0x0f;
+		uint8_t opcode = (ntohs(rx_hdr.flags) >> 11) & 0x0f;
 		if (opcode != LDNS_PACKET_QUERY) {
 			rcode = LDNS_RCODE_NOTIMPL;
 		} else {
@@ -140,25 +147,23 @@ bool Server::handle_packet_dns(Buffer& in, Buffer& out)
 	}
 
 	// craft response header
-	auto* rx_header = reinterpret_cast<uint16_t*>(header);
-	auto* tx_header = reinterpret_cast<uint16_t*>(out.reserve(12));
+	auto& tx_hdr = out.reserve_ref<dnshdr>();
+	tx_hdr.id = rx_hdr.id;
 
-	tx_header[0] = rx_header[0];
-
-	uint16_t flags = ntohs(rx_header[1]);
+	uint16_t flags = ntohs(rx_hdr.flags);
 	flags &= 0x0110;		// copy RD + CD
 	flags |= 0x8000;		// QR
 	flags |= (rcode & 0x0f);	// set rcode
 	flags |= 0x0000;		// TODO: AA bit
+	tx_hdr.flags = htons(flags);
 
-	tx_header[1] = htons(flags);
-	tx_header[2] = htons(qdsize ? 1 : 0);	// QDCOUNT
-	tx_header[3] = htons(0);	// TODO: ANCOUNT
-	tx_header[4] = htons(0);	// TODO: NSCOUNT
-	tx_header[5] = htons(0);	// TODO: ARCOUNT
+	tx_hdr.qdcount = htons(qdsize ? 1 : 0);	// QDCOUNT
+	tx_hdr.ancount = htons(0);	// TODO: ANCOUNT
+	tx_hdr.nscount = htons(0);	// TODO: NSCOUNT
+	tx_hdr.arcount = htons(0);	// TODO: ARCOUNT
 
 	// copy question section
-	memcpy(out.reserve(qdsize), header + 12, qdsize);
+	::memcpy(out.reserve(qdsize), qdstart, qdsize);
 
 	return true;
 }
@@ -184,13 +189,13 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 		if (in.available() < ihl) return;
 
 		// consume IPv4 header, skipping IP options
-		auto& l3 = *reinterpret_cast<ip*>(in.reserve(ihl));
+		auto& l3 = in.reserve_ref<struct ip>();
 
 		// UDP only supported
 		if (l3.ip_p != IPPROTO_UDP) return;
 
 		// populate reply header
-		auto& ip = *reinterpret_cast<struct ip*>(out.reserve(sizeof(iphdr)));
+		auto& ip = out.reserve_ref<struct ip>();
 
 		ip.ip_v = 4;
 		ip.ip_hl = (sizeof ip) / 4;
@@ -210,7 +215,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 
 	// consume L4 header
 	if (in.available() < sizeof(udphdr)) return;
-	auto& l4 = *reinterpret_cast<udphdr*>(in.reserve(sizeof(udphdr)));
+	auto& l4 = in.reserve_ref<udphdr>();
 
 	// require expected dest port
 	if (l4.uh_dport != htons(8053)) return;

@@ -22,6 +22,12 @@ public:
 	uint8_t* current() const;
 
 	uint8_t& operator[](size_t x) const;
+
+	template<typename T> T& reserve_ref();
+	template<typename T> T& current_ref() const;
+
+	template<typename T> T* reserve();
+	template<typename T> T* current() const;
 };
 
 inline Buffer::Buffer(uint8_t* base, size_t size) : _base(base), _size(size), _offset(0)
@@ -53,4 +59,24 @@ inline size_t Buffer::available() const {
 
 inline uint8_t& Buffer::operator[](size_t x) const {
 	return _base[x];
+}
+
+template<typename T>
+T& Buffer::reserve_ref() {
+	return *reinterpret_cast<T*>(reserve(sizeof(T)));
+}
+
+template<typename T>
+T& Buffer::current_ref() const {
+	return *reinterpret_cast<T*>(current());
+}
+
+template<typename T>
+T* Buffer::reserve() {
+	return reinterpret_cast<T*>(reserve(sizeof(T)));
+}
+
+template<typename T>
+T* Buffer::current() const {
+	return reinterpret_cast<T*>(current());
 }
