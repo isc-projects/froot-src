@@ -132,7 +132,10 @@ bool Server::handle_packet_dns(Buffer& in, Buffer& out)
 	uint16_t rcode;
 	size_t qdsize = 0;
 
+	// extract DNS header
 	auto rx_hdr = in.reserve_ref<dnshdr>();
+
+	// mark start of question section
 	auto qdstart = in.current();
 
 	if (!valid_header(rx_hdr)) {
@@ -157,7 +160,8 @@ bool Server::handle_packet_dns(Buffer& in, Buffer& out)
 	flags |= 0x0000;		// TODO: AA bit
 	tx_hdr.flags = htons(flags);
 
-	tx_hdr.qdcount = htons(qdsize ? 1 : 0);	// QDCOUNT
+	// section counts
+	tx_hdr.qdcount = htons(qdsize ? 1 : 0);
 	tx_hdr.ancount = htons(0);	// TODO: ANCOUNT
 	tx_hdr.nscount = htons(0);	// TODO: NSCOUNT
 	tx_hdr.arcount = htons(0);	// TODO: ARCOUNT
@@ -205,7 +209,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 		ip.ip_off = 0;
 		ip.ip_ttl = 31;
 		ip.ip_p = l3.ip_p;
-		ip.ip_sum = 0;		// TODO: calculate
+		ip.ip_sum = 0;
 		ip.ip_src = l3.ip_dst;
 		ip.ip_dst = l3.ip_src;
 
@@ -223,10 +227,11 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	// ignore illegal source ports
 	if (l4.uh_sport == htons(0) || l4.uh_sport == htons(7) || l4.uh_sport == htons(123)) return;
 
-	// populate response fields
+	// remember the start of the UDP header
 	auto udpoff = out.used();
-	auto& udp = *reinterpret_cast<udphdr*>(out.reserve(sizeof(udphdr)));
 
+	// populate response fields
+	auto& udp = out.reserve_ref<udphdr>();
 	udp.uh_sport = l4.uh_dport;
 	udp.uh_dport = l4.uh_sport;
 	udp.uh_sum = 0;
