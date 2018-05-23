@@ -2,7 +2,7 @@
 
 #include "zone.h"
 #include "packet.h"
-#include "response.h"
+#include "buffer.h"
 
 class Server {
 
@@ -10,8 +10,8 @@ private:
 	Zone			zone;
 
 private:
-	int query(const uint8_t* buffer, size_t len, size_t& qdsize) const;
-	bool handle_packet_dns(uint8_t* buffer, size_t buflen, uint8_t* outbuf, size_t& outoff);
+	int query(Buffer& in, size_t& qdsize) const;
+	bool handle_packet_dns(Buffer& in, Buffer& out);
 	void handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata);
 	void loop(PacketSocket& s);
 
@@ -22,5 +22,4 @@ public:
 public:
 	Server();
 	~Server();
-
 };
