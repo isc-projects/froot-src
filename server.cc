@@ -1,6 +1,9 @@
 #include <iostream>
 #include <functional>
 
+#include <sys/types.h>
+#include <sys/socket.h>
+
 #include <arpa/inet.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
@@ -21,10 +24,20 @@ static bool valid_header(const uint8_t* buffer, size_t len)
 		return false;
 	}
 
+	// QR is set inbound
+	if (buffer[2] & 0x80) {
+		return false;
+	}
+
+	return true;
+}
+
+static bool valid_format(const uint8_t* buffer, size_t len)
+{
 	auto w = reinterpret_cast<const uint16_t *>(buffer);
 
-	// OPCODE = 0 && RCODE == 0
-	if ((ntohs(w[1]) & 0x780f) != 0) {
+	// RCODE == 0
+	if ((ntohs(w[1]) & 0x000f) != 0) {
 		return false;
 	}
 
@@ -47,16 +60,8 @@ static bool valid_header(const uint8_t* buffer, size_t len)
 	return true;
 }
 
-int Server::query(const uint8_t* buffer, size_t len, Response::Chunk& answer) const
+int Server::query(const uint8_t* buffer, size_t len, size_t& qdsize) const
 {
-	if (!valid_header(buffer, len)) {
-		return LDNS_RCODE_FORMERR;
-	}
-
-	if (buffer[2] & 0x80) {			// QR == 0
-		return LDNS_RCODE_FORMERR;	// should just drop
-	}
-
 	size_t offset = 12;
 	auto last = offset;
 
@@ -71,7 +76,7 @@ int Server::query(const uint8_t* buffer, size_t len, Response::Chunk& answer) co
 			return LDNS_RCODE_FORMERR;
 		}
 	}
-	auto qlen = offset - last - 1;
+	auto qname_length = offset - last - 1;
 
 	uint16_t qtype = buffer[offset++] << 8;
 	qtype |= buffer[offset++];
@@ -85,12 +90,16 @@ int Server::query(const uint8_t* buffer, size_t len, Response::Chunk& answer) co
 		return LDNS_RCODE_FORMERR;	// trailing garbage
 	}
 
+	// determine question section length for copying
+	qdsize = offset - 12;
+
 	// make lower cased qname
-	auto qname = strlower(&buffer[last], qlen);
+	auto qname = strlower(&buffer[last], qname_length);
 
 	bool match = false;
 	auto iter = zone.lookup(qname, match);
 
+	// name not found, get its predecessor for NSECs
 	if (!match) {
 		--iter;
 	}
@@ -98,62 +107,149 @@ int Server::query(const uint8_t* buffer, size_t len, Response::Chunk& answer) co
 	return match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
 }
 
-void Server::handle_packet_dns(Response& response, uint8_t* buffer, size_t buflen)
+bool Server::handle_packet_dns(uint8_t* buffer, size_t buflen, uint8_t* outbuf, size_t& outoff)
 {
-	Response::Chunk answer;
+	hexdump(std::cerr, buffer, buflen);
 
-	(void) query(buffer, buflen, answer);
+	// drop invalid packets
+	if (!valid_header(buffer, buflen)) {
+		return false;
+	}
 
-	response.append(answer);
-	response.send();
-}
+	uint16_t rcode;
+	size_t qdsize = 0;
 
-void Server::handle_packet_udp(Response& response, uint8_t* buffer, size_t buflen)
-{
-	// UDP header too short
-	if (buflen < sizeof(udphdr)) return;
+	if (!valid_format(buffer, buflen)) {
+		rcode = LDNS_RCODE_FORMERR;
+	} else {
+		uint8_t opcode = (buffer[2] >> 3) & 0x0f;
+		if (opcode != LDNS_PACKET_QUERY) {
+			rcode = LDNS_RCODE_NOTIMPL;
+		} else {
+			rcode = query(buffer, buflen, qdsize);
+		}
+	}
 
-	auto& udp = *reinterpret_cast<udphdr*>(buffer);
-	if (udp.uh_dport != htons(53)) return;
+	// craft response header
+	auto* tx_header = reinterpret_cast<uint16_t*>(outbuf + outoff);
+	auto* rx_header = reinterpret_cast<uint16_t*>(buffer);
+	outoff += 12;
 
-	buffer += sizeof udp;
-	buflen -= sizeof udp;
+	tx_header[0] = rx_header[0];
 
-	handle_packet_dns(response, buffer, buflen);
-}
+	uint16_t flags = ntohs(rx_header[1]);
+	flags &= 0x0110;		// copy RD + CD
+	flags |= 0x8000;		// QR
+	flags |= (rcode & 0x0f);	// set rcode
+	flags |= 0x0000;		// TODO: AA bit
 
-void Server::handle_packet_ipv4(Response& response, uint8_t* buffer, size_t buflen)
-{
-	// IP header too short
-	if (buflen < sizeof(iphdr)) return;
+	tx_header[1] = htons(flags);
+	tx_header[2] = htons(qdsize ? 1 : 0);	// QDCOUNT
+	tx_header[3] = htons(0);	// TODO: ANCOUNT
+	tx_header[4] = htons(0);	// TODO: NSCOUNT
+	tx_header[5] = htons(0);	// TODO: ARCOUNT
 
-	auto& ip = *reinterpret_cast<iphdr*>(buffer);
-	if (ip.protocol != IPPROTO_UDP) return;
+	// copy qustion section
+	memcpy(outbuf + outoff, buffer + 12, qdsize);
+	outoff += qdsize;
 
-	// move to UDP header
-	auto ihl = 4 * ip.ihl;
-	buffer += ihl;
-	buflen -= ihl;
-
-	handle_packet_udp(response, buffer, buflen);
-}
-
-void Server::handle_packet_ipv6(Response& response, uint8_t* buffer, size_t buflen)
-{
+	return true;
 }
 
 void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
 {
 	// empty frame
-	if (!buflen) return;
+	if (buflen <= 0) return;
 
-	Response response(s, addr);
+	uint8_t outbuf[512];
+	size_t outoff = 0;
 
+	auto ip4p = reinterpret_cast<ip*>(outbuf + outoff);
+
+	// extract L3 header
 	auto version = (buffer[0] >> 4) & 0x0f;
+
 	if (version == 4) {
-		handle_packet_ipv4(response, buffer, buflen);
+		// IP header too short
+		if (buflen < sizeof *ip4p) return;
+
+		// consume IPv4 header, skipping IP options
+		auto& l3 = *reinterpret_cast<ip*>(buffer);
+		auto ihl = 4 * l3.ip_hl;
+		buffer += ihl;
+		buflen -= ihl;
+
+		// UDP only supported
+		if (l3.ip_p != IPPROTO_UDP) return;
+
+		// populate reply header
+		auto& ip = *ip4p;
+		outoff += sizeof l3;
+
+		ip.ip_v = 4;
+		ip.ip_hl = (sizeof ip) / 4;
+		ip.ip_tos = 0;
+		ip.ip_len = 0;
+		ip.ip_id = l3.ip_id;
+		ip.ip_off = 0;
+		ip.ip_ttl = 31;
+		ip.ip_p = l3.ip_p;
+		ip.ip_sum = 0;		// TODO: calculate
+		ip.ip_src = l3.ip_dst;
+		ip.ip_dst = l3.ip_src;
+
 	} else if (version == 6) {
-		handle_packet_ipv6(response, buffer, buflen);
+		return;
+	}
+
+	// consume L4 header
+	if (buflen < sizeof(udphdr)) return;
+	auto l4 = *reinterpret_cast<udphdr*>(buffer);
+	buffer += sizeof l4;
+	buflen -= sizeof l4;
+
+	// require expected dest port
+	if (l4.uh_dport != htons(8053)) return;
+
+	// ignore illegal source ports
+	if (l4.uh_sport == htons(0) || l4.uh_sport == htons(7) || l4.uh_sport == htons(123)) return;
+
+	// populate response fields
+	auto udpoff = outoff;
+	auto& udp = *reinterpret_cast<udphdr*>(outbuf + udpoff);
+	outoff += sizeof(udp);
+
+	udp.uh_sport = l4.uh_dport;
+	udp.uh_dport = l4.uh_sport;
+	udp.uh_sum = 0;
+	udp.uh_ulen = 0;
+
+	if (handle_packet_dns(buffer, buflen, outbuf, outoff)) {
+
+		// update IP length
+		if (version == 4) {
+			auto& ip = *ip4p;
+			ip.ip_len = htons(outoff);
+			ip.ip_sum = checksum(&ip, sizeof ip);
+		}
+
+		// update UDP length
+		udp.uh_ulen = htons(outoff - udpoff);
+
+		// construct response message
+		msghdr msg;
+		iovec iov[] = { { outbuf, outoff } };
+
+		msg.msg_name = reinterpret_cast<void*>(const_cast<sockaddr_ll*>(addr));
+		msg.msg_namelen = sizeof(sockaddr_ll);
+		msg.msg_iov = iov;
+		msg.msg_iovlen = 1;
+		msg.msg_control = nullptr;
+		msg.msg_controllen = 0;
+		msg.msg_flags = 0;
+
+		// and send it on
+		::sendmsg(s.fd, &msg, MSG_DONTWAIT);
 	}
 }
 

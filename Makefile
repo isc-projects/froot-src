@@ -1,7 +1,7 @@
 INCS = $(shell pkg-config ldns --cflags)
 LIBS = $(shell pkg-config ldns --libs)
 
-CXXFLAGS = -O3 -std=c++11 -Wall -Werror -Wno-error=pragmas $(INCS)
+CXXFLAGS = -O3 -std=c++11 -Wall -Werror -Wno-error=pragmas $(INCS) -D_POSIX_SOURCE
 LDFLAGS =
 
 BIN = lightning
