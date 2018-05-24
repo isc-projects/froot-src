@@ -28,13 +28,13 @@ int app(int argc, char *argv[])
 		for (size_t i = 0; i < 1e7; ++i) {
 			auto& q = queries[i];
 
-			Buffer in { q.data(), q.size() };
-			in.reserve(q.size());
+			ReadBuffer in { q.data(), q.size() };
 
-			uint8_t bufout[4096];
-			Buffer out { bufout, 4096 };
+			ldns_enum_pkt_rcode rcode;
+			bool match;
+			size_t qdsize;
 
-			auto rcode = server.query(in, out);
+			(void) server.query(in, qdsize, match, rcode);
 			++rcodes[rcode];
 		}
 	}
