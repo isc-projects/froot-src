@@ -2,11 +2,11 @@
 #define __packet_h
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <functional>
 
 #include <poll.h>
-
 #include <net/ethernet.h>
 #include <linux/if_packet.h>
 
