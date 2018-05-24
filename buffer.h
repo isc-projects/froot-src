@@ -12,12 +12,15 @@ private:
 
 public:
 	Buffer(uint8_t* base, size_t size);
+	Buffer(const Buffer& rhs);
+	Buffer& operator=(const Buffer& rhs);
 
 public:
 	size_t size() const;
 	size_t used() const;
 	size_t available() const;
 
+	uint8_t* base() const;
 	uint8_t* reserve(size_t n);
 	uint8_t* current() const;
 
@@ -34,15 +37,17 @@ inline Buffer::Buffer(uint8_t* base, size_t size) : _base(base), _size(size), _o
 {
 }
 
-inline uint8_t* Buffer::reserve(size_t n)
-{
-	auto p = _base + _offset;
-	_offset += n;
-	return p;
+inline Buffer::Buffer(const Buffer& rhs) {
+	_base = rhs._base;
+	_size = rhs._size;
+	_offset = rhs._offset;
 }
 
-inline uint8_t* Buffer::current() const {
-	return _base + _offset;
+inline Buffer& Buffer::operator=(const Buffer& rhs) {
+	_base = rhs._base;
+	_size = rhs._size;
+	_offset = rhs._offset;
+	return *this;
 }
 
 inline size_t Buffer::size() const {
@@ -55,6 +60,21 @@ inline size_t Buffer::used() const {
 
 inline size_t Buffer::available() const {
 	return _size - _offset;
+}
+
+inline uint8_t* Buffer::base() const {
+	return _base;
+}
+
+inline uint8_t* Buffer::reserve(size_t n)
+{
+	auto p = _base + _offset;
+	_offset += n;
+	return p;
+}
+
+inline uint8_t* Buffer::current() const {
+	return _base + _offset;
 }
 
 inline uint8_t& Buffer::operator[](size_t x) const {

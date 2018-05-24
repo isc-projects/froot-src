@@ -5,6 +5,8 @@
 
 #include <ldns/dnssec.h>
 
+#include "buffer.h"
+
 /*
 	<= 512 positive
 	<= 512 negative
@@ -18,27 +20,40 @@
 	+ TC variants
 */
 
+class Answer {
+
+	Buffer*			buffer;
+
+public:
+	uint16_t		ancount;
+	uint16_t		nscount;
+	uint16_t		arcount;
+
+public:
+	Answer(ldns_rr_list* an, ldns_rr_list* ns, ldns_rr_list* ar);
+	~Answer();
+
+	Buffer&			data() const;
+
+};
+
 class NameData {
 
-#if 0
-	ldns_rr_list*		ns;
-	ldns_rr_list*		ds;
-	ldns_rr_list*		glue_a;
-	ldns_rr_list*		glue_aaaa;
-#endif
-	ldns_rr*		nsec;
-	ldns_rr_list*		nsec_sigs;
+private:
+	Answer*			positive;
 
 public:
 	NameData(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone);
 	~NameData();
 
+public:
+	const Answer* answer(ldns_enum_pkt_rcode rcode) const;
 };
 
 class Zone {
 
 public:
-	typedef std::map<std::string, const NameData&> Data;
+	typedef std::map<std::string, const NameData*> Data;
 
 private:
 	ldns_dnssec_zone*	zone = nullptr;

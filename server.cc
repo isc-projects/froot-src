@@ -1,5 +1,6 @@
 #include <iostream>
 #include <functional>
+#include <vector>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -67,8 +68,10 @@ static bool valid_header(const dnshdr& h)
 	return true;
 }
 
-int Server::query(Buffer& in, size_t& qdsize) const
+const Answer* Server::query(Buffer& in, size_t& qdsize, bool& match, ldns_enum_pkt_rcode& rcode) const
 {
+	match = false;
+
 	auto p = in.current();
 	auto len = in.available();
 
@@ -78,12 +81,14 @@ int Server::query(Buffer& in, size_t& qdsize) const
 	uint8_t c;
 	while ((c = p[offset++])) {
 		if (c & 0xc0) {			// No compression in question
-			return LDNS_RCODE_FORMERR;
+			rcode = LDNS_RCODE_FORMERR;
+			return nullptr;
 		}
 		last = offset;
 		offset += c;
 		if (offset > len - 4 || offset > 255) {
-			return LDNS_RCODE_FORMERR;
+			rcode = LDNS_RCODE_FORMERR;
+			return nullptr;
 		}
 	}
 	auto qname_length = offset - last - 1;
@@ -97,7 +102,8 @@ int Server::query(Buffer& in, size_t& qdsize) const
 	// TODO: EDNS decoding
 
 	if (offset != len) {
-		return LDNS_RCODE_FORMERR;	// trailing garbage
+		rcode = LDNS_RCODE_FORMERR;	// trailing garbage
+		return nullptr;
 	}
 
 	// mark this data as read
@@ -109,7 +115,7 @@ int Server::query(Buffer& in, size_t& qdsize) const
 	// make lower cased qname
 	auto qname = strlower(&p[last], qname_length);
 
-	bool match = false;
+	match = false;
 	auto iter = zone.lookup(qname, match);
 
 	// name not found, get its predecessor for NSECs
@@ -117,10 +123,12 @@ int Server::query(Buffer& in, size_t& qdsize) const
 		--iter;
 	}
 
-	return match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
+	rcode = match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
+
+	return iter->second->answer(rcode);	// TODO: more flags
 }
 
-bool Server::handle_packet_dns(Buffer& in, Buffer& out)
+bool Server::handle_packet_dns(Buffer& in, Buffer& head, Buffer& body)
 {
 	hexdump(std::cerr, in.current(), in.available());
 
@@ -129,7 +137,8 @@ bool Server::handle_packet_dns(Buffer& in, Buffer& out)
 		return false;
 	}
 
-	uint16_t rcode;
+	ldns_enum_pkt_rcode rcode;
+	bool match = false;
 	size_t qdsize = 0;
 
 	// extract DNS header
@@ -138,6 +147,8 @@ bool Server::handle_packet_dns(Buffer& in, Buffer& out)
 	// mark start of question section
 	auto qdstart = in.current();
 
+	const Answer *answer = nullptr;
+
 	if (!valid_header(rx_hdr)) {
 		rcode = LDNS_RCODE_FORMERR;
 	} else {
@@ -145,12 +156,15 @@ bool Server::handle_packet_dns(Buffer& in, Buffer& out)
 		if (opcode != LDNS_PACKET_QUERY) {
 			rcode = LDNS_RCODE_NOTIMPL;
 		} else {
-			rcode = query(in, qdsize);
+			answer = query(in, qdsize, match, rcode);
+			body = answer->data();
 		}
 	}
 
+std::cerr << "body size = " << body.used() << std::endl;
+
 	// craft response header
-	auto& tx_hdr = out.reserve_ref<dnshdr>();
+	auto& tx_hdr = head.reserve_ref<dnshdr>();
 	tx_hdr.id = rx_hdr.id;
 
 	uint16_t flags = ntohs(rx_hdr.flags);
@@ -162,12 +176,12 @@ bool Server::handle_packet_dns(Buffer& in, Buffer& out)
 
 	// section counts
 	tx_hdr.qdcount = htons(qdsize ? 1 : 0);
-	tx_hdr.ancount = htons(0);	// TODO: ANCOUNT
-	tx_hdr.nscount = htons(0);	// TODO: NSCOUNT
-	tx_hdr.arcount = htons(0);	// TODO: ARCOUNT
+	tx_hdr.ancount = htons(answer ? answer->ancount : 0);
+	tx_hdr.nscount = htons(answer ? answer->nscount : 0);
+	tx_hdr.arcount = htons(answer ? answer->arcount : 0);
 
 	// copy question section
-	::memcpy(out.reserve(qdsize), qdstart, qdsize);
+	::memcpy(head.reserve(qdsize), qdstart, qdsize);
 
 	return true;
 }
@@ -177,11 +191,12 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	// empty frame
 	if (buflen <= 0) return;
 
-	uint8_t outbuf[512];
+	uint8_t headbuf[512];
 	Buffer in  { buffer, buflen };
-	Buffer out { outbuf, sizeof outbuf };
+	Buffer head { headbuf, sizeof headbuf };
+	Buffer body { nullptr, 0 };
 
-	auto out_l3_header = out.current();
+	auto head_l3_header = head.base();
 
 	// extract L3 header
 	auto version = (in[0] >> 4) & 0x0f;
@@ -199,7 +214,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 		if (l3.ip_p != IPPROTO_UDP) return;
 
 		// populate reply header
-		auto& ip = out.reserve_ref<struct ip>();
+		auto& ip = head.reserve_ref<struct ip>();
 
 		ip.ip_v = 4;
 		ip.ip_hl = (sizeof ip) / 4;
@@ -228,35 +243,41 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	if (l4.uh_sport == htons(0) || l4.uh_sport == htons(7) || l4.uh_sport == htons(123)) return;
 
 	// remember the start of the UDP header
-	auto udpoff = out.used();
+	auto udpoff = head.used();
 
 	// populate response fields
-	auto& udp = out.reserve_ref<udphdr>();
+	auto& udp = head.reserve_ref<udphdr>();
 	udp.uh_sport = l4.uh_dport;
 	udp.uh_dport = l4.uh_sport;
 	udp.uh_sum = 0;
 	udp.uh_ulen = 0;
 
-	if (handle_packet_dns(in, out)) {
+	if (handle_packet_dns(in, head, body)) {
+
+std::cerr << "body size = " << body.used() << std::endl;
 
 		// update IP length
 		if (version == 4) {
-			auto& ip = *reinterpret_cast<struct ip*>(out_l3_header);
-			ip.ip_len = htons(out.used());
+			auto& ip = *reinterpret_cast<struct ip*>(head_l3_header);
+			ip.ip_len = htons(head.used() + body.used());
 			ip.ip_sum = checksum(&ip, sizeof ip);
 		}
 
+		// generate the chunks to be sent
+		std::vector<iovec> iov = { { head.base(), head.used() } };
+		if (body.base()) {
+			iov.push_back(iovec { body.base(), body.used() });
+		}
+
 		// update UDP length
-		udp.uh_ulen = htons(out.used() - udpoff);
+		udp.uh_ulen = htons(body.used() + head.used() - udpoff);
 
 		// construct response message
 		msghdr msg;
-		iovec iov[] = { { &out[0], out.used() } };
-
 		msg.msg_name = reinterpret_cast<void*>(const_cast<sockaddr_ll*>(addr));
 		msg.msg_namelen = sizeof(sockaddr_ll);
-		msg.msg_iov = iov;
-		msg.msg_iovlen = 1;
+		msg.msg_iov = iov.data();
+		msg.msg_iovlen = iov.size();
 		msg.msg_control = nullptr;
 		msg.msg_controllen = 0;
 		msg.msg_flags = 0;
