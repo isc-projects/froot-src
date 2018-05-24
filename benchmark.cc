@@ -4,6 +4,7 @@
 
 #include "server.h"
 #include "datafile.h"
+#include "buffer.h"
 #include "timer.h"
 
 int app(int argc, char *argv[])
@@ -26,7 +27,14 @@ int app(int argc, char *argv[])
 		BenchmarkTimer t("10M queries");
 		for (size_t i = 0; i < 1e7; ++i) {
 			auto& q = queries[i];
-			auto rcode = server.query(q.data(), q.size());
+
+			Buffer in { q.data(), q.size() };
+			in.reserve(q.size());
+
+			uint8_t bufout[4096];
+			Buffer out { bufout, 4096 };
+
+			auto rcode = server.query(in, out);
 			++rcodes[rcode];
 		}
 	}
