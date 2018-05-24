@@ -27,7 +27,7 @@ void Server::load(const std::string& filename)
 	zone.load(filename);
 }
 
-static bool legal_header(const Buffer& in)
+static bool legal_header(const ReadBuffer& in)
 {
 	// minimum packet length = 12 + 1 + 2 + 2
 	if (in.available() < 17) {
@@ -68,52 +68,68 @@ static bool valid_header(const dnshdr& h)
 	return true;
 }
 
-const Answer* Server::query(Buffer& in, size_t& qdsize, bool& match, ldns_enum_pkt_rcode& rcode) const
+const Answer* Server::query(ReadBuffer& in, size_t& qdsize, bool& match, ldns_enum_pkt_rcode& rcode) const
 {
 	match = false;
 
-	auto p = in.current();
-	auto len = in.available();
+	size_t qdstart = in.position();
+	auto last = qdstart;
+	auto total = 0U;
 
-	size_t offset = 0;
-	auto last = offset;
-
+	// find last label of qname
 	uint8_t c;
-	while ((c = p[offset++])) {
-		if (c & 0xc0) {			// No compression in question
+	while ((in.available() > 0) && (c = in.read<uint8_t>())) {
+
+		// remember the start of this label
+		last = in.position();
+
+		// No compression in question
+		if (c & 0xc0) {
 			rcode = LDNS_RCODE_FORMERR;
 			return nullptr;
 		}
-		last = offset;
-		offset += c;
-		if (offset > len - 4 || offset > 255) {
+
+		// check maximum name length
+		int label_length = c;
+		total += label_length;
+		total += 1;		// count length byte too
+
+		if (total > 255) {
 			rcode = LDNS_RCODE_FORMERR;
 			return nullptr;
 		}
+
+		// consume the label
+		(void) in.read_array<uint8_t>(c);
 	}
-	auto qname_length = offset - last - 1;
 
-	uint16_t qtype = p[offset++] << 8;
-	qtype |= p[offset++];
+	// ensure there's room for qtype and qclass
+	if (in.available() < 4) {
+		rcode = LDNS_RCODE_FORMERR;
+		return nullptr;
+	}
 
-	uint16_t qclass = p[offset++] << 8;
-	qclass |= p[offset++];
+	// should now be pointing at one beyond the root label
+	auto qname_length = in.position() - last - 1;
+
+	// read qtype and qclass
+	(void) ntohs(in.read<uint16_t>());	// qtype
+	(void) ntohs(in.read<uint16_t>());	// qclass
+
+	// TODO: parse qtype and qclass
 
 	// TODO: EDNS decoding
 
-	if (offset != len) {
+	if (in.available() > 0) {
 		rcode = LDNS_RCODE_FORMERR;	// trailing garbage
 		return nullptr;
 	}
 
-	// mark this data as read
-	(void) in.reserve(offset);
-
 	// determine question section length for copying
-	qdsize = offset;
+	qdsize = in.position() - qdstart;
 
 	// make lower cased qname
-	auto qname = strlower(&p[last], qname_length);
+	auto qname = strlower(&in[last], qname_length);
 
 	match = false;
 	auto iter = zone.lookup(qname, match);
@@ -128,10 +144,8 @@ const Answer* Server::query(Buffer& in, size_t& qdsize, bool& match, ldns_enum_p
 	return iter->second->answer(rcode);	// TODO: more flags
 }
 
-bool Server::handle_packet_dns(Buffer& in, Buffer& head, Buffer& body)
+bool Server::handle_packet_dns(ReadBuffer& in, WriteBuffer& head, ReadBuffer& body)
 {
-	hexdump(std::cerr, in.current(), in.available());
-
 	// drop invalid packets
 	if (!legal_header(in)) {
 		return false;
@@ -142,7 +156,7 @@ bool Server::handle_packet_dns(Buffer& in, Buffer& head, Buffer& body)
 	size_t qdsize = 0;
 
 	// extract DNS header
-	auto rx_hdr = in.reserve_ref<dnshdr>();
+	auto rx_hdr = in.read<dnshdr>();
 
 	// mark start of question section
 	auto qdstart = in.current();
@@ -157,14 +171,14 @@ bool Server::handle_packet_dns(Buffer& in, Buffer& head, Buffer& body)
 			rcode = LDNS_RCODE_NOTIMPL;
 		} else {
 			answer = query(in, qdsize, match, rcode);
-			body = answer->data();
+			if (answer) {
+				body = answer->data();
+			}
 		}
 	}
 
-std::cerr << "body size = " << body.used() << std::endl;
-
 	// craft response header
-	auto& tx_hdr = head.reserve_ref<dnshdr>();
+	auto& tx_hdr = head.write<dnshdr>();
 	tx_hdr.id = rx_hdr.id;
 
 	uint16_t flags = ntohs(rx_hdr.flags);
@@ -181,7 +195,7 @@ std::cerr << "body size = " << body.used() << std::endl;
 	tx_hdr.arcount = htons(answer ? answer->arcount : 0);
 
 	// copy question section
-	::memcpy(head.reserve(qdsize), qdstart, qdsize);
+	::memcpy(head.write(qdsize), qdstart, qdsize);
 
 	return true;
 }
@@ -192,9 +206,9 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	if (buflen <= 0) return;
 
 	uint8_t headbuf[512];
-	Buffer in  { buffer, buflen };
-	Buffer head { headbuf, sizeof headbuf };
-	Buffer body { nullptr, 0 };
+	ReadBuffer  in	 { buffer, buflen };
+	WriteBuffer head { headbuf, sizeof headbuf };
+	ReadBuffer  body { nullptr, 0 };
 
 	auto head_l3_header = head.base();
 
@@ -208,13 +222,16 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 		if (in.available() < ihl) return;
 
 		// consume IPv4 header, skipping IP options
-		auto& l3 = in.reserve_ref<struct ip>();
+		auto& l3 = in.read<struct ip>();
+		if (ihl > sizeof l3) {
+			(void) in.read(ihl - sizeof l3);
+		}
 
 		// UDP only supported
 		if (l3.ip_p != IPPROTO_UDP) return;
 
 		// populate reply header
-		auto& ip = head.reserve_ref<struct ip>();
+		auto& ip = head.write<struct ip>();
 
 		ip.ip_v = 4;
 		ip.ip_hl = (sizeof ip) / 4;
@@ -234,7 +251,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 
 	// consume L4 header
 	if (in.available() < sizeof(udphdr)) return;
-	auto& l4 = in.reserve_ref<udphdr>();
+	auto& l4 = in.read<udphdr>();
 
 	// require expected dest port
 	if (l4.uh_dport != htons(8053)) return;
@@ -243,10 +260,10 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	if (l4.uh_sport == htons(0) || l4.uh_sport == htons(7) || l4.uh_sport == htons(123)) return;
 
 	// remember the start of the UDP header
-	auto udpoff = head.used();
+	auto udpoff = head.position();
 
 	// populate response fields
-	auto& udp = head.reserve_ref<udphdr>();
+	auto& udp = head.write<udphdr>();
 	udp.uh_sport = l4.uh_dport;
 	udp.uh_dport = l4.uh_sport;
 	udp.uh_sum = 0;
@@ -254,23 +271,26 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 
 	if (handle_packet_dns(in, head, body)) {
 
-std::cerr << "body size = " << body.used() << std::endl;
+		auto payload = head.position() + body.position();
 
 		// update IP length
 		if (version == 4) {
 			auto& ip = *reinterpret_cast<struct ip*>(head_l3_header);
-			ip.ip_len = htons(head.used() + body.used());
+			ip.ip_len = htons(payload);
 			ip.ip_sum = checksum(&ip, sizeof ip);
 		}
 
 		// generate the chunks to be sent
-		std::vector<iovec> iov = { { head.base(), head.used() } };
-		if (body.base()) {
-			iov.push_back(iovec { body.base(), body.used() });
+		std::vector<iovec> iov = { { head.base(), head.position() } };
+		if (body.position()) {
+			iov.push_back(iovec {
+				const_cast<void*>(body.base()),
+				body.position()
+			});
 		}
 
 		// update UDP length
-		udp.uh_ulen = htons(body.used() + head.used() - udpoff);
+		udp.uh_ulen = htons(payload - udpoff);
 
 		// construct response message
 		msghdr msg;

@@ -35,7 +35,7 @@ int LDNS_rr_list2buffer_wire(ldns_buffer* buf, ldns_rr_list* list, int section)
 	}
 }
 
-Buffer& Answer::data() const
+ReadBuffer Answer::data() const
 {
 	return *buffer;
 }
@@ -53,15 +53,17 @@ Answer::Answer(ldns_rr_list* an, ldns_rr_list* ns, ldns_rr_list* ar)
 	auto p = reinterpret_cast<uint8_t*>(ldns_buffer_export(lbuf));
 	ldns_buffer_free(lbuf);
 
-	buffer = new Buffer(p, size);
-	(void) buffer->reserve(size);	// mark the contents as used
+	buffer = new ReadBuffer(p, size);
+
+	// move to end of buffer
+	(void) buffer->read(size);
 }
 
 Answer::~Answer()
 {
-	auto p = &buffer[0];
+	auto p = buffer->base();
 	delete buffer;
-	delete p;
+	free(const_cast<void*>(p));
 }
 
 const Answer* NameData::answer(ldns_enum_pkt_rcode rcode) const

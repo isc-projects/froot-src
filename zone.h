@@ -22,7 +22,7 @@
 
 class Answer {
 
-	Buffer*			buffer;
+	ReadBuffer*		buffer;
 
 public:
 	uint16_t		ancount;
@@ -33,7 +33,7 @@ public:
 	Answer(ldns_rr_list* an, ldns_rr_list* ns, ldns_rr_list* ar);
 	~Answer();
 
-	Buffer&			data() const;
+	ReadBuffer		data() const;
 
 };
 

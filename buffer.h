@@ -4,99 +4,142 @@
 
 class Buffer {
 
-private:
+protected:
 
 	uint8_t*		_base;
 	size_t			_size;
-	size_t			_offset;
+	size_t			_position;
 
-public:
+protected:
 	Buffer(uint8_t* base, size_t size);
-	Buffer(const Buffer& rhs);
-	Buffer& operator=(const Buffer& rhs);
 
 public:
 	size_t size() const;
-	size_t used() const;
+	size_t position() const;
 	size_t available() const;
-
-	uint8_t* base() const;
-	uint8_t* reserve(size_t n);
-	uint8_t* current() const;
-
-	uint8_t& operator[](size_t x) const;
-
-	template<typename T> T& reserve_ref();
-	template<typename T> T& current_ref() const;
-
-	template<typename T> T* reserve();
-	template<typename T> T* current() const;
+	void reset();
 };
 
-inline Buffer::Buffer(uint8_t* base, size_t size) : _base(base), _size(size), _offset(0)
+class ReadBuffer : public Buffer {
+
+public:
+	ReadBuffer(const uint8_t* base, size_t size);
+
+public:
+	const void* base() const;
+	const uint8_t* current() const;
+	const uint8_t* read(size_t n);
+
+	template<typename T> const T& read();
+	template<typename T> const T* read_array(size_t n);
+
+	const uint8_t& operator[](size_t x) const;
+};
+
+class WriteBuffer : public Buffer {
+
+public:
+	WriteBuffer(const uint8_t* base, size_t size);
+
+public:
+	void* base() const;
+	uint8_t* write(size_t n);
+
+	template<typename T> T& write();
+	template<typename T> T* write_array(size_t n);
+
+	uint8_t& operator[](size_t x) const;
+};
+
+inline Buffer::Buffer(uint8_t* base, size_t size) : _base(base), _size(size), _position(0)
 {
 }
 
-inline Buffer::Buffer(const Buffer& rhs) {
-	_base = rhs._base;
-	_size = rhs._size;
-	_offset = rhs._offset;
+inline ReadBuffer::ReadBuffer(const uint8_t* base, size_t size)
+	: Buffer(const_cast<uint8_t*>(base), size)
+{
 }
 
-inline Buffer& Buffer::operator=(const Buffer& rhs) {
-	_base = rhs._base;
-	_size = rhs._size;
-	_offset = rhs._offset;
+inline WriteBuffer::WriteBuffer(const uint8_t* base, size_t size)
+	: Buffer(const_cast<uint8_t*>(base), size)
+{
+}
+
+#if 0
+inline ReadBuffer& ReadBuffer::operator=(const Buffer& rhs)
+{
+	_base = const_cast<uint8_t*>(rhs.base());
+	_size = rhs.size();
+	_position = rhs.position();
+
 	return *this;
 }
+#endif
+
+inline void Buffer::reset() {
+	_position = 0;
+};
 
 inline size_t Buffer::size() const {
 	return _size;
 }
 
-inline size_t Buffer::used() const {
-	return _offset;
+inline size_t Buffer::position() const {
+	return _position;
 }
 
 inline size_t Buffer::available() const {
-	return _size - _offset;
+	return _size - _position;
 }
 
-inline uint8_t* Buffer::base() const {
+inline const void* ReadBuffer::base() const {
 	return _base;
 }
 
-inline uint8_t* Buffer::reserve(size_t n)
-{
-	auto p = _base + _offset;
-	_offset += n;
-	return p;
+inline void* WriteBuffer::base() const {
+	return _base;
 }
 
-inline uint8_t* Buffer::current() const {
-	return _base + _offset;
+inline const uint8_t* ReadBuffer::current() const {
+	return _base + _position;
 }
 
-inline uint8_t& Buffer::operator[](size_t x) const {
+inline const uint8_t& ReadBuffer::operator[](size_t x) const {
 	return _base[x];
 }
 
-template<typename T>
-T& Buffer::reserve_ref() {
-	return *reinterpret_cast<T*>(reserve(sizeof(T)));
+inline const uint8_t* ReadBuffer::read(size_t n) {
+	auto p = _base + _position;
+	_position += n;
+	return p;
 }
 
 template<typename T>
-T& Buffer::current_ref() const {
-	return *reinterpret_cast<T*>(current());
+const T& ReadBuffer::read() {
+	return *read_array<T>(1);
 }
 
 template<typename T>
-T* Buffer::reserve() {
-	return reinterpret_cast<T*>(reserve(sizeof(T)));
+const T* ReadBuffer::read_array(size_t n) {
+	return reinterpret_cast<const T*>(read(n * sizeof(T)));
+}
+
+inline uint8_t& WriteBuffer::operator[](size_t x) const {
+	return _base[x];
+}
+
+inline uint8_t* WriteBuffer::write(size_t n) {
+	auto p = _base + _position;
+	_position += n;
+	return p;
 }
 
 template<typename T>
-T* Buffer::current() const {
-	return reinterpret_cast<T*>(current());
+T& WriteBuffer::write() {
+	return *write_array<T>(1);
+}
+
+template<typename T>
+T* WriteBuffer::write_array(size_t n) {
+	return reinterpret_cast<T*>(write(n * sizeof(T)));
 }
