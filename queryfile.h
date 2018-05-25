@@ -4,6 +4,8 @@
 #include <vector>
 #include <deque>
 
+#if 0
+
 class QueryRecord {
 
 public:
@@ -11,14 +13,13 @@ public:
 
 private:
 	Buffer				buffer;
-	size_t				len;
 
 public:
 	QueryRecord(const std::string& name, const std::string& qtype);
-	QueryRecord(const QueryRecord::Buffer& buffer, size_t len);
+	QueryRecord(QueryRecord::Buffer&& buffer, size_t len);
 
 	size_t size() const {
-		return len;
+		return buffer.size();
 	}
 
 	const uint8_t* const data() const {
@@ -26,10 +27,15 @@ public:
 	}
 };
 
+#endif
+
 class QueryFile {
 
+public:
+	typedef std::vector<uint8_t>	Record;
+
 private:
-	typedef std::deque<QueryRecord>	storage_t;
+	typedef std::deque<Record>	storage_t;
 	storage_t			queries;
 
 public:
@@ -39,7 +45,7 @@ public:
 
 public:
 
-	const QueryRecord&		operator[](size_t n) const {
+	const Record&			operator[](size_t n) const {
 		return queries[n];
 	};
 

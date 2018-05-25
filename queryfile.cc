@@ -23,7 +23,7 @@ static std::map<std::string, uint16_t> type_map = {
 	{ "SRV",	 33 },
 };
 
-uint16_t type_to_number(const std::string& type, bool check_case = true)
+static uint16_t type_to_number(const std::string& type, bool check_case = true)
 {
 	auto itr = type_map.find(type);
 	if (itr != type_map.end()) {
@@ -54,28 +54,23 @@ uint16_t type_to_number(const std::string& type, bool check_case = true)
 	}
 }
 
-QueryRecord::QueryRecord(const std::string& name, const std::string& type)
+static QueryFile::Record make_record(const std::string& name, const std::string& type)
 {
+	QueryFile::Record record;
+	record.resize(12 + 255 + 4);	// maximum question section
+
 	uint16_t qtype = type_to_number(type);
 
 	int n = res_mkquery(0, name.c_str(), 1, qtype, nullptr, 0, nullptr,
-			    buffer.data(), buffer.size());
+			    record.data(), record.size());
 	if (n < 0) {
 		throw std::runtime_error("couldn't parse domain name");
 	} else {
-		len = n;
+		record.resize(n);
+		return record;
 	}
 }
 
-QueryRecord::QueryRecord(const QueryRecord::Buffer& input, size_t _len)
-{
-	len = _len;
-	buffer.resize(len);
-	std::copy(input.cbegin(), input.cbegin() + len, buffer.begin());
-}
-
-//---------------------------------------------------------------------
-//
 void QueryFile::read_txt(const std::string& filename)
 {
 	std::ifstream file(filename);
@@ -91,7 +86,8 @@ void QueryFile::read_txt(const std::string& filename)
 		line_no++;
 
 		try {
-			list.emplace_back(QueryRecord(name, type));
+			Record record;
+			list.emplace_back(make_record(name, type));
 		} catch (std::runtime_error &e) {
 			std::string error = "reading query file at line "
 					+ std::to_string(line_no)
@@ -113,17 +109,18 @@ void QueryFile::read_raw(const std::string& filename)
 	}
 
 	storage_t list;
-	QueryRecord::Buffer buffer;
 	uint16_t len;
 
 	while (file) {
 		if (file.read(reinterpret_cast<char*>(&len), sizeof(len))) {
 
 			len = ntohs(len);			// swap to host order
-			buffer.resize(len);			// ensure there's room
 
-			if (file.read(reinterpret_cast<char*>(buffer.data()), len)) {
-				list.emplace_back(QueryRecord(buffer, len));
+			Record record;
+			record.resize(len);
+
+			if (file.read(reinterpret_cast<char*>(record.data()), len)) {
+				list.emplace_back(record);
 			}
 		}
 	}
