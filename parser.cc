@@ -14,6 +14,9 @@ struct dnshdr {
 	uint16_t	arcount;
 };
 
+//
+// reject headers that don't merit any response at all
+//
 static bool legal_header(const ReadBuffer& in)
 {
 	// minimum packet length = 12 + 1 + 2 + 2
@@ -55,16 +58,13 @@ static bool valid_header(const dnshdr& h)
 	return true;
 }
 
-static const Answer* lookup(const Zone& zone, ReadBuffer& in, size_t& qdsize, bool& match, ldns_enum_pkt_rcode& rcode)
+//
+// find last label of qname
+//
+static bool parse_qname(ReadBuffer& in, std::string& qname)
 {
-	match = false;
-
-	size_t qdstart = in.position();
-	qdsize = 0;
-	auto last = qdstart;
 	auto total = 0U;
-
-	// find last label of qname
+	auto last = in.position();
 
 	while (in.available() > 0) {
 
@@ -76,8 +76,7 @@ static const Answer* lookup(const Zone& zone, ReadBuffer& in, size_t& qdsize, bo
 
 		// No compression in question
 		if (c & 0xc0) {
-			rcode = LDNS_RCODE_FORMERR;
-			return nullptr;
+			return false;
 		}
 
 		// check maximum name length
@@ -86,12 +85,33 @@ static const Answer* lookup(const Zone& zone, ReadBuffer& in, size_t& qdsize, bo
 		total += 1;		// count length byte too
 
 		if (total > 255) {
-			rcode = LDNS_RCODE_FORMERR;
-			return nullptr;
+			return false;
 		}
 
 		// consume the label
 		(void) in.read_array<uint8_t>(c);
+	}
+
+	// should now be pointing at one beyond the root label
+	auto qname_length = in.position() - last - 1;
+
+	// make lower cased qname
+	qname.assign(strlower(&in[last], qname_length));
+
+	return true;
+}
+
+static const Answer* lookup(const Zone& zone, ReadBuffer& in, size_t& qdsize, bool& match, ldns_enum_pkt_rcode& rcode)
+{
+	qdsize = 0;
+	match = false;
+
+	size_t qdstart = in.position();
+
+	std::string qname;
+	if (!parse_qname(in, qname)) {
+		rcode = LDNS_RCODE_FORMERR;
+		return nullptr;
 	}
 
 	// ensure there's room for qtype and qclass
@@ -100,14 +120,14 @@ static const Answer* lookup(const Zone& zone, ReadBuffer& in, size_t& qdsize, bo
 		return nullptr;
 	}
 
-	// should now be pointing at one beyond the root label
-	auto qname_length = in.position() - last - 1;
-
 	// read qtype and qclass
 	(void) ntohs(in.read<uint16_t>());	// qtype
 	(void) ntohs(in.read<uint16_t>());	// qclass
 
-	// TODO: parse qtype and qclass
+	// determine question section length for copying
+	qdsize = in.position() - qdstart;
+
+	// TODO: use qtype and qclass
 
 	// TODO: EDNS decoding
 
@@ -116,13 +136,6 @@ static const Answer* lookup(const Zone& zone, ReadBuffer& in, size_t& qdsize, bo
 		return nullptr;
 	}
 
-	// determine question section length for copying
-	qdsize = in.position() - qdstart;
-
-	// make lower cased qname
-	auto qname = strlower(&in[last], qname_length);
-
-	match = false;
 	auto& data = zone.lookup(qname, match);
 	rcode = match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
 
@@ -137,8 +150,8 @@ bool parse_query(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer
 	}
 
 	ldns_enum_pkt_rcode rcode;
-	bool match = false;
 	size_t qdsize = 0;
+	bool match = false;
 
 	// extract DNS header
 	auto rx_hdr = in.read<dnshdr>();
