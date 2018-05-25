@@ -150,21 +150,12 @@ void Zone::load(const std::string& filename)
 
 const NameData& Zone::lookup(const std::string& qname, bool& matched) const
 {
-	matched = false;
-
-	const auto iter1 = aux.find(qname);
-	if (iter1 != aux.end()) {
-		matched = true;
-		return *(iter1->second);
-	}
-
-	auto iter2 = data.lower_bound(qname);
-	matched = (iter2 != data.end()) && (iter2->first == qname);
-
+	auto iter = data.lower_bound(qname);
+	matched = (iter != data.end()) && (iter->first == qname);
 	if (!matched) {
-		--iter2;
+		--iter;
 	}
-	return *(iter2->second);
+	return *(iter->second);
 }
 
 Zone::Zone()
