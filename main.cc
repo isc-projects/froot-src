@@ -8,8 +8,6 @@
 int app(int argc, char *argv[])
 {
 	Server server;
-	Datafile queries;
-
 	server.load("root.zone");
 	server.worker("enp2s0");
 

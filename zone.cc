@@ -148,11 +148,23 @@ void Zone::load(const std::string& filename)
 	build_answers();
 }
 
-Zone::Data::const_iterator Zone::lookup(const std::string& qname, bool& matched) const
+const NameData& Zone::lookup(const std::string& qname, bool& matched) const
 {
-	auto itr = data.lower_bound(qname);
-	matched = (itr != data.end()) && (itr->first == qname);
-	return itr;
+	matched = false;
+
+	const auto iter1 = aux.find(qname);
+	if (iter1 != aux.end()) {
+		matched = true;
+		return *(iter1->second);
+	}
+
+	auto iter2 = data.lower_bound(qname);
+	matched = (iter2 != data.end()) && (iter2->first == qname);
+
+	if (!matched) {
+		--iter2;
+	}
+	return *(iter2->second);
 }
 
 Zone::Zone()

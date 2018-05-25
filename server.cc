@@ -136,16 +136,10 @@ const Answer* Server::query(ReadBuffer& in, size_t& qdsize, bool& match, ldns_en
 	auto qname = strlower(&in[last], qname_length);
 
 	match = false;
-	auto iter = zone.lookup(qname, match);
-
-	// name not found, get its predecessor for NSECs
-	if (!match) {
-		--iter;
-	}
-
+	auto& data = zone.lookup(qname, match);
 	rcode = match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
 
-	return iter->second->answer(rcode);	// TODO: more flags
+	return data.answer(rcode);		// TODO: more flags
 }
 
 bool Server::handle_packet_dns(ReadBuffer& in, WriteBuffer& head, ReadBuffer& body)

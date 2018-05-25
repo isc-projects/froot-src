@@ -2,6 +2,7 @@
 
 #include <string>
 #include <map>
+#include <unordered_map>
 
 #include <ldns/dnssec.h>
 
@@ -52,12 +53,14 @@ public:
 
 class Zone {
 
-public:
+private:
 	typedef std::map<std::string, const NameData*> Data;
+	typedef std::unordered_map<std::string, const NameData*> Aux;
 
 private:
 	ldns_dnssec_zone*	zone = nullptr;
 	Data data;
+	Aux aux;
 
 private:
 	void add_name(const ldns_dnssec_name* name);
@@ -65,7 +68,7 @@ private:
 
 public:
 	void load(const std::string& filename);
-	Data::const_iterator lookup(const std::string& qname, bool& match) const;
+	const NameData& lookup(const std::string& qname, bool& match) const;
 
 public:
 	Zone();
