@@ -22,23 +22,21 @@ all: $(BIN)
 lightning:	main.o packet.o $(COMMON_OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
-benchmark:	 benchmark.o datafile.o query.o timer.o $(COMMON_OBJS)
+benchmark:	 benchmark.o queryfile.o timer.o $(COMMON_OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
 clean:
 	$(RM) $(BIN) *.o
 
 # dependencies
-benchmark.o:	server.h datafile.h buffer.h timer.h
-datafile.o:	datafile.h util.h
+benchmark.o:	server.h queryfile.h timer.h
+queryfile.o:	queryfile.h util.h
 main.o:		server.h
 packet.o:	packet.h util.h
-query.o:	query.h
 server.o:	server.h util.h
 timer.o:	timer.h
 util.o:		util.h
 zone.o:		zone.h util.h
 
-datafile.h:	query.h
 server.h:	zone.h packet.h buffer.h
 zone.h:		buffer.h

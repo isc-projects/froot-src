@@ -2,15 +2,14 @@
 #include <iostream>
 #include <map>
 
+#include "queryfile.h"
 #include "server.h"
-#include "datafile.h"
-#include "buffer.h"
 #include "timer.h"
 
 int app(int argc, char *argv[])
 {
 	Server server;
-	Datafile queries;
+	QueryFile queries;
 
 	{
 		BenchmarkTimer t("load zone");
