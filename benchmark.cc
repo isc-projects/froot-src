@@ -26,16 +26,19 @@ int app(int argc, char *argv[])
 	{
 		BenchmarkTimer t("10M queries");
 		for (size_t i = 0; i < 1e7; ++i) {
+
 			auto& q = queries[i];
+			uint8_t tmp[512];
 
 			ReadBuffer in { q.data(), q.size() };
+			WriteBuffer head { tmp, sizeof tmp };
+			ReadBuffer body { nullptr, 0 } ;
 
-			ldns_enum_pkt_rcode rcode;
-			bool match;
-			size_t qdsize;
-
-			(void) server.query(in, qdsize, match, rcode);
-			++rcodes[rcode];
+			(void) server.handle_packet_dns(in, head, body);
+			if (head.position() > 12) {
+				auto rcode = head[3] & 0x0f;
+				++rcodes[rcode];
+			}
 		}
 	}
 

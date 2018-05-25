@@ -73,12 +73,16 @@ const Answer* Server::query(ReadBuffer& in, size_t& qdsize, bool& match, ldns_en
 	match = false;
 
 	size_t qdstart = in.position();
+	qdsize = 0;
 	auto last = qdstart;
 	auto total = 0U;
 
 	// find last label of qname
-	uint8_t c;
-	while ((in.available() > 0) && (c = in.read<uint8_t>())) {
+
+	while (in.available() > 0) {
+
+		auto c = in.read<uint8_t>();
+		if (c == 0) break;
 
 		// remember the start of this label
 		last = in.position();

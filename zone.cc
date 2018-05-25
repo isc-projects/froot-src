@@ -119,7 +119,9 @@ void Zone::build_answers()
 	auto node = ldns_rbtree_first(zone->names);
 	while (node != LDNS_RBTREE_NULL) {
 		auto name = reinterpret_cast<const ldns_dnssec_name *>(node->data);
-		if (!ldns_dnssec_name_is_glue(name)) {
+
+		// temporary const_cast for older versions of ldns
+		if (!ldns_dnssec_name_is_glue(const_cast<ldns_dnssec_name*>(name))) {
 			add_name(name);
 		}
 		node = ldns_rbtree_next(node);
@@ -149,7 +151,7 @@ void Zone::load(const std::string& filename)
 Zone::Data::const_iterator Zone::lookup(const std::string& qname, bool& matched) const
 {
 	auto itr = data.lower_bound(qname);
-	matched = (itr->first == qname);
+	matched = (itr != data.end()) && (itr->first == qname);
 	return itr;
 }
 
