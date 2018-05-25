@@ -12,14 +12,14 @@ CXXFLAGS = -g -O3 -std=c++11 -Wall -Werror -Wno-error=pragmas $(INCS) -D_POSIX_S
 LDFLAGS =
 
 BIN = lightning benchmark
-COMMON_OBJS = server.o packet.o zone.o util.o
+COMMON_OBJS = parser.o zone.o util.o
 LIBS += -lresolv
 
 .PHONY:	all clean
 
 all: $(BIN)
 
-lightning:	main.o packet.o $(COMMON_OBJS)
+lightning:	main.o server.o packet.o $(COMMON_OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
 benchmark:	 benchmark.o queryfile.o timer.o $(COMMON_OBJS)
@@ -29,14 +29,16 @@ clean:
 	$(RM) $(BIN) *.o
 
 # dependencies
-benchmark.o:	server.h queryfile.h timer.h
+benchmark.o:	zone.h queryfile.h parser.h timer.h
 queryfile.o:	queryfile.h util.h
 main.o:		server.h
 packet.o:	packet.h util.h
-server.o:	server.h util.h
+parser.o:	parser.h
+server.o:	server.h parser.h util.h
 timer.o:	timer.h
 util.o:		util.h
 zone.o:		zone.h util.h
 
-server.h:	zone.h packet.h buffer.h
+parser.h:	zone.h buffer.h
+server.h:	zone.h packet.h
 zone.h:		buffer.h

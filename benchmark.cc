@@ -2,18 +2,19 @@
 #include <iostream>
 #include <map>
 
+#include "zone.h"
 #include "queryfile.h"
-#include "server.h"
+#include "parser.h"
 #include "timer.h"
 
 int app(int argc, char *argv[])
 {
-	Server server;
+	Zone zone;
 	QueryFile queries;
 
 	{
 		BenchmarkTimer t("load zone");
-		server.load("root.zone");
+		zone.load("root.zone");
 	}
 
 	{
@@ -33,8 +34,8 @@ int app(int argc, char *argv[])
 			WriteBuffer head { tmp, sizeof tmp };
 			ReadBuffer body { nullptr, 0 } ;
 
-			(void) server.handle_packet_dns(in, head, body);
-			if (head.position() > 12) {
+			(void) parse_query(zone, in, head, body);
+			if (head.position() >= 12) {
 				auto rcode = head[3] & 0x0f;
 				++rcodes[rcode];
 			}
