@@ -12,6 +12,37 @@
 #include "zone.h"
 #include "util.h"
 
+/*
+ * answer types:
+ *
+ *   . SOA	[ SOA, NS, glue ] + AA
+ *   . NS	[ NS, empty, glue ] + AA
+ *   . DNSKEY	[ DNSKEY, empty, empty ] + AA
+ *   . NSEC	[ NSEC, NS, glue ] + AA
+ *   . xxx	[ empty, SOA, empty ] + AA
+ *
+ *   foo DS	[ DS, empty, empty ] + AA
+ *   foo xxx	[ empty, NS, glue ] -> "referral"
+ *   *.foo xxx	referral
+ *
+ *   nxd	[ empty, SOA, empty ] + AA
+ *
+ *   with DNSSEC:
+ *
+ *   . SOA	[ SOA*, NS*, glue ] + AA
+ *   . NS	[ NS*, empty, glue ] + AA
+ *   . DNSKEY	[ DNSKEY*, empty, empty ] + AA
+ *   . NSEC	[ NSEC*, NS*, glue ] + AA
+ *   . xxx	[ empty, SOA* + NSEC*, empty ] + AA
+ *
+ *   foo DS	[ DS*, empty, empty ] + AA
+ *   foo xxx	[ empty, NS + DS*, glue ] -> "signed referral"
+ *   *.foo xxx	signed referral
+ *
+ *   nxd	[ empty, SOA* + NSEC*, empty ] + AA
+ *
+ */
+
 ldns_rr_list* LDNS_rr_list_new_frm_dnssec_rrs(ldns_dnssec_rrs *rrs)
 {
 	auto rr_list = ldns_rr_list_new();
@@ -40,7 +71,12 @@ ReadBuffer Answer::data() const
 	return *buffer;
 }
 
-Answer::Answer(ldns_rr_list* an, ldns_rr_list* ns, ldns_rr_list* ar)
+bool Answer::authoritative() const
+{
+	return aa_bit;
+}
+
+Answer::Answer(ldns_rr_list* an, ldns_rr_list* ns, ldns_rr_list* ar, bool aa_bit) : aa_bit(aa_bit)
 {
 	size_t n = 4096;
 	auto lbuf = ldns_buffer_new(n);
@@ -54,8 +90,6 @@ Answer::Answer(ldns_rr_list* an, ldns_rr_list* ns, ldns_rr_list* ar)
 	ldns_buffer_free(lbuf);
 
 	buffer = new ReadBuffer(p, size);
-
-	// move to end of buffer
 	(void) buffer->read(size);
 }
 
@@ -66,9 +100,13 @@ Answer::~Answer()
 	free(const_cast<void*>(p));
 }
 
-const Answer* NameData::answer(ldns_enum_pkt_rcode rcode) const
+const Answer* NameData::answer(ldns_pkt_rcode rcode, unsigned labels, bool match, uint16_t qtype, bool do_bit) const
 {
-	return positive;
+	if (rcode == LDNS_RCODE_NXDOMAIN) {
+		return negative;
+	} else {
+		return positive;
+	}
 }
 
 NameData::NameData(const ldns_dnssec_name* name, const ldns_dnssec_zone *zone)
@@ -76,6 +114,7 @@ NameData::NameData(const ldns_dnssec_name* name, const ldns_dnssec_zone *zone)
 	// ldns_rr_list* glue_a = nullptr;
 	// ldns_rr_list* glue_aaaa = nullptr;
 	ldns_rr_list* ns = nullptr;
+	auto soa = LDNS_rr_list_new_frm_dnssec_rrs(ldns_dnssec_name_find_rrset(zone->soa, LDNS_RR_TYPE_SOA)->rrs);
 
 	auto rrset = name->rrsets;
 	while (rrset) {
@@ -88,7 +127,8 @@ NameData::NameData(const ldns_dnssec_name* name, const ldns_dnssec_zone *zone)
 		rrset = rrset->next;
 	}
 
-	positive = new Answer(nullptr, ns, nullptr);
+	negative = new Answer(soa, nullptr, nullptr, true);
+	positive = new Answer(nullptr, ns, nullptr, false);
 
 	// nsec = ldns_rr_clone(name->nsec);
 	// nsec_sigs = LDNS_rr_list_new_frm_dnssec_rrs(name->nsec_signatures);
@@ -99,6 +139,7 @@ NameData::~NameData()
 	// ldns_rr_free(nsec);
 	// ldns_rr_list_deep_free(nsec_sigs);
 
+	delete negative;
 	delete positive;
 }
 

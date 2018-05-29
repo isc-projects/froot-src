@@ -90,7 +90,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 
 	if (parse_query(zone, in, head, body)) {
 
-		auto payload = head.position() + body.position();
+		auto payload = head.position() + body.size();
 
 		// update IP length
 		if (version == 4) {
@@ -104,7 +104,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 		if (body.position()) {
 			iov.push_back(iovec {
 				const_cast<void*>(body.base()),
-				body.position()
+				body.size()
 			});
 		}
 

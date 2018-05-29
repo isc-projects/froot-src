@@ -8,39 +8,29 @@
 
 #include "buffer.h"
 
-/*
-	<= 512 positive
-	<= 512 negative
-
-	EDNS positive
-	EDNS negative
-
-	EDNS + DO positive
-	EDNS + DO negative
-
-	+ TC variants
-*/
-
 class Answer {
 
 	ReadBuffer*		buffer;
 
 public:
-	uint16_t		ancount;
-	uint16_t		nscount;
-	uint16_t		arcount;
+	uint16_t		ancount = 0;
+	uint16_t		nscount = 0;
+	uint16_t		arcount = 0;
+	bool			aa_bit = false;
 
 public:
-	Answer(ldns_rr_list* an, ldns_rr_list* ns, ldns_rr_list* ar);
+	Answer(ldns_rr_list* an, ldns_rr_list* ns, ldns_rr_list* ar, bool aa_bit);
 	~Answer();
 
 	ReadBuffer		data() const;
+	bool			authoritative() const;
 
 };
 
 class NameData {
 
 private:
+	Answer*			negative;
 	Answer*			positive;
 
 public:
@@ -48,7 +38,7 @@ public:
 	~NameData();
 
 public:
-	const Answer* answer(ldns_enum_pkt_rcode rcode) const;
+	const Answer* answer(ldns_enum_pkt_rcode rcode, unsigned labels, bool match, uint16_t qtype, bool do_bit) const;
 };
 
 class Zone {

@@ -61,10 +61,11 @@ static bool valid_header(const dnshdr& h)
 //
 // find last label of qname
 //
-static bool parse_qname(ReadBuffer& in, std::string& qname)
+static bool parse_qname(ReadBuffer& in, std::string& qname, unsigned& labels)
 {
 	auto total = 0U;
 	auto last = in.position();
+	labels = 0;
 
 	while (in.available() > 0) {
 
@@ -73,6 +74,7 @@ static bool parse_qname(ReadBuffer& in, std::string& qname)
 
 		// remember the start of this label
 		last = in.position();
+		++labels;
 
 		// No compression in question
 		if (c & 0xc0) {
@@ -101,15 +103,26 @@ static bool parse_qname(ReadBuffer& in, std::string& qname)
 	return true;
 }
 
-static const Answer* lookup(const Zone& zone, ReadBuffer& in, size_t& qdsize, bool& match, ldns_enum_pkt_rcode& rcode)
+#if 0
+static bool parse_edns(ReadBuffer& in, uint16_t bufsize, bool& do_bit)
 {
+	bufsize = 512;
+	do_bit = false;
+
+	return true;
+}
+#endif
+
+static const Answer* lookup(const Zone& zone, ReadBuffer& in, size_t& qdsize, ldns_enum_pkt_rcode& rcode)
+{
+	bool match = false;
+	unsigned labels = 0;
 	qdsize = 0;
-	match = false;
 
 	size_t qdstart = in.position();
 
 	std::string qname;
-	if (!parse_qname(in, qname)) {
+	if (!parse_qname(in, qname, labels)) {
 		rcode = LDNS_RCODE_FORMERR;
 		return nullptr;
 	}
@@ -121,17 +134,25 @@ static const Answer* lookup(const Zone& zone, ReadBuffer& in, size_t& qdsize, bo
 	}
 
 	// read qtype and qclass
-	(void) ntohs(in.read<uint16_t>());	// qtype
-	(void) ntohs(in.read<uint16_t>());	// qclass
+	auto qtype = ntohs(in.read<uint16_t>());// qtype
+	auto qclass = ntohs(in.read<uint16_t>());	// qclass
 
 	// determine question section length for copying
+	// returning before this point will result in an
+	// empty question section in responses
 	qdsize = in.position() - qdstart;
 
-	// TODO: use qtype and qclass
+	// reject unknown qclasses
+	if (qclass != LDNS_RR_CLASS_IN) {
+		rcode = LDNS_RCODE_NOTIMPL;
+		return nullptr;
+	}
 
 	// TODO: EDNS decoding
+	bool do_bit = false;
 
-	if (in.available() > 0) {
+	// apparent bug in AF_PACKET sets min size to 46
+	if (in.available() > 0 && in.size() > 46) {
 		rcode = LDNS_RCODE_FORMERR;	// trailing garbage
 		return nullptr;
 	}
@@ -139,7 +160,7 @@ static const Answer* lookup(const Zone& zone, ReadBuffer& in, size_t& qdsize, bo
 	auto& data = zone.lookup(qname, match);
 	rcode = match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
 
-	return data.answer(rcode);		// TODO: more flags
+	return data.answer(rcode, labels, match, qtype, do_bit);
 }
 
 bool parse_query(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer& body)
@@ -151,7 +172,6 @@ bool parse_query(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer
 
 	ldns_enum_pkt_rcode rcode;
 	size_t qdsize = 0;
-	bool match = false;
 
 	// extract DNS header
 	auto rx_hdr = in.read<dnshdr>();
@@ -168,7 +188,7 @@ bool parse_query(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer
 		if (opcode != LDNS_PACKET_QUERY) {
 			rcode = LDNS_RCODE_NOTIMPL;
 		} else {
-			answer = lookup(zone, in, qdsize, match, rcode);
+			answer = lookup(zone, in, qdsize, rcode);
 			if (answer) {
 				body = answer->data();
 			}
@@ -183,7 +203,9 @@ bool parse_query(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer
 	flags &= 0x0110;		// copy RD + CD
 	flags |= 0x8000;		// QR
 	flags |= (rcode & 0x0f);	// set rcode
-	flags |= 0x0000;		// TODO: AA bit
+	if (answer && answer->authoritative()) {
+		flags |= 0x0400;	// AA bit
+	}
 	tx_hdr.flags = htons(flags);
 
 	// section counts
