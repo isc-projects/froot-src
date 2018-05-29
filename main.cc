@@ -8,7 +8,7 @@ int app(int argc, char *argv[])
 {
 	Server server;
 	server.load("root.zone");
-	server.worker("enp2s0");
+	server.worker("ens192");
 
 	return 0;
 }

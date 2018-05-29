@@ -43,6 +43,8 @@
  *
  */
 
+Answer* Answer::empty = new Answer(nullptr, nullptr, nullptr, false);
+
 ldns_rr_list* LDNS_rr_list_new_frm_dnssec_rrs(ldns_dnssec_rrs *rrs)
 {
 	auto rr_list = ldns_rr_list_new();
@@ -100,9 +102,9 @@ Answer::~Answer()
 	free(const_cast<void*>(p));
 }
 
-const Answer* NameData::answer(ldns_pkt_rcode rcode, unsigned labels, bool match, uint16_t qtype, bool do_bit) const
+const Answer* NameData::answer(const Context& ctx) const
 {
-	if (rcode == LDNS_RCODE_NXDOMAIN) {
+	if (ctx.rcode == LDNS_RCODE_NXDOMAIN) {
 		return negative;
 	} else {
 		return positive;

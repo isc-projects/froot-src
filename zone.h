@@ -6,7 +6,10 @@
 
 #include <ldns/dnssec.h>
 
+#include "context.h"
 #include "buffer.h"
+
+class Context;
 
 class Answer {
 
@@ -25,11 +28,15 @@ public:
 	ReadBuffer		data() const;
 	bool			authoritative() const;
 
+public:
+	static Answer*		empty;
+
 };
 
 class NameData {
 
 private:
+	static Answer*		empty;
 	Answer*			negative;
 	Answer*			positive;
 
@@ -38,7 +45,7 @@ public:
 	~NameData();
 
 public:
-	const Answer* answer(ldns_enum_pkt_rcode rcode, unsigned labels, bool match, uint16_t qtype, bool do_bit) const;
+	const Answer* answer(const Context& ctx) const;
 };
 
 class Zone {

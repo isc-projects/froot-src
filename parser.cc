@@ -3,6 +3,7 @@
 #include <ldns/packet.h>
 
 #include "parser.h"
+#include "context.h"
 #include "util.h"
 
 struct dnshdr {
@@ -61,7 +62,7 @@ static bool valid_header(const dnshdr& h)
 //
 // find last label of qname
 //
-static bool parse_qname(ReadBuffer& in, std::string& qname, unsigned& labels)
+static bool parse_qname(ReadBuffer& in, std::string& qname, uint8_t& labels)
 {
 	auto total = 0U;
 	auto last = in.position();
@@ -113,28 +114,25 @@ static bool parse_edns(ReadBuffer& in, uint16_t bufsize, bool& do_bit)
 }
 #endif
 
-static const Answer* lookup(const Zone& zone, ReadBuffer& in, size_t& qdsize, ldns_enum_pkt_rcode& rcode)
+static void lookup(Context& ctx, const Zone& zone, ReadBuffer& in, size_t& qdsize)
 {
-	bool match = false;
-	unsigned labels = 0;
 	qdsize = 0;
 
 	size_t qdstart = in.position();
 
-	std::string qname;
-	if (!parse_qname(in, qname, labels)) {
-		rcode = LDNS_RCODE_FORMERR;
-		return nullptr;
+	if (!parse_qname(in, ctx.qname, ctx.qlabels)) {
+		ctx.rcode = LDNS_RCODE_FORMERR;
+		return;
 	}
 
 	// ensure there's room for qtype and qclass
 	if (in.available() < 4) {
-		rcode = LDNS_RCODE_FORMERR;
-		return nullptr;
+		ctx.rcode = LDNS_RCODE_FORMERR;
+		return;
 	}
 
 	// read qtype and qclass
-	auto qtype = ntohs(in.read<uint16_t>());// qtype
+	ctx.qtype = ntohs(in.read<uint16_t>());// qtype
 	auto qclass = ntohs(in.read<uint16_t>());	// qclass
 
 	// determine question section length for copying
@@ -144,33 +142,33 @@ static const Answer* lookup(const Zone& zone, ReadBuffer& in, size_t& qdsize, ld
 
 	// reject unknown qclasses
 	if (qclass != LDNS_RR_CLASS_IN) {
-		rcode = LDNS_RCODE_NOTIMPL;
-		return nullptr;
+		ctx.rcode = LDNS_RCODE_NOTIMPL;
+		return;
 	}
 
 	// TODO: EDNS decoding
-	bool do_bit = false;
+	ctx.do_bit = false;
 
 	// apparent bug in AF_PACKET sets min size to 46
 	if (in.available() > 0 && in.size() > 46) {
-		rcode = LDNS_RCODE_FORMERR;	// trailing garbage
-		return nullptr;
+		ctx.rcode = LDNS_RCODE_FORMERR;	// trailing garbage
+		return;
 	}
 
-	auto& data = zone.lookup(qname, match);
-	rcode = match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
-
-	return data.answer(rcode, labels, match, qtype, do_bit);
+	auto& data = zone.lookup(ctx.qname, ctx.match);
+	ctx.rcode = ctx.match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
+	ctx.answer = data.answer(ctx);
 }
 
 bool parse_query(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer& body)
 {
+	Context ctx;
+
 	// drop invalid packets
 	if (!legal_header(in)) {
 		return false;
 	}
 
-	ldns_enum_pkt_rcode rcode;
 	size_t qdsize = 0;
 
 	// extract DNS header
@@ -179,21 +177,19 @@ bool parse_query(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer
 	// mark start of question section
 	auto qdstart = in.current();
 
-	const Answer *answer = nullptr;
-
 	if (!valid_header(rx_hdr)) {
-		rcode = LDNS_RCODE_FORMERR;
+		ctx.rcode = LDNS_RCODE_FORMERR;
 	} else {
 		uint8_t opcode = (ntohs(rx_hdr.flags) >> 11) & 0x0f;
 		if (opcode != LDNS_PACKET_QUERY) {
-			rcode = LDNS_RCODE_NOTIMPL;
+			ctx.rcode = LDNS_RCODE_NOTIMPL;
 		} else {
-			answer = lookup(zone, in, qdsize, rcode);
-			if (answer) {
-				body = answer->data();
-			}
+			lookup(ctx, zone, in, qdsize);
+			body = ctx.answer->data();
 		}
 	}
+
+	auto *answer = ctx.answer;
 
 	// craft response header
 	auto& tx_hdr = head.write<dnshdr>();
@@ -202,8 +198,8 @@ bool parse_query(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer
 	uint16_t flags = ntohs(rx_hdr.flags);
 	flags &= 0x0110;		// copy RD + CD
 	flags |= 0x8000;		// QR
-	flags |= (rcode & 0x0f);	// set rcode
-	if (answer && answer->authoritative()) {
+	flags |= (ctx.rcode & 0x0f);	// set rcode
+	if (answer->authoritative()) {
 		flags |= 0x0400;	// AA bit
 	}
 	tx_hdr.flags = htons(flags);
