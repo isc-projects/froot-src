@@ -34,6 +34,7 @@ queryfile.o:	queryfile.h util.h
 main.o:		server.h
 packet.o:	packet.h util.h
 parser.o:	parser.h
+query.o:	query.h
 server.o:	server.h parser.h util.h
 timer.o:	timer.h
 util.o:		util.h
