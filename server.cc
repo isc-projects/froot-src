@@ -29,7 +29,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	WriteBuffer head { headbuf, sizeof headbuf };
 	ReadBuffer  body { nullptr, 0 };
 
-	Context ctx(zone, in, head);
+	Context ctx(zone, in, head, body);
 
 	auto head_l3_header = head.base();
 
@@ -90,7 +90,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	udp.uh_sum = 0;
 	udp.uh_ulen = 0;
 
-	if (ctx.parse(body)) {
+	if (ctx.execute()) {
 
 		auto payload = head.position() + body.size();
 
@@ -103,7 +103,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 
 		// generate the chunks to be sent
 		std::vector<iovec> iov = { { head.base(), head.position() } };
-		if (body.position()) {
+		if (body.size()) {
 			iov.push_back(iovec {
 				const_cast<void*>(body.base()),
 				body.size()

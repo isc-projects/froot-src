@@ -87,7 +87,6 @@ Answer::Answer(ldns_rr_list* an, ldns_rr_list* ns, ldns_rr_list* ar, bool aa_bit
 	ldns_buffer_free(lbuf);
 
 	buffer = new ReadBuffer(p, size);
-	(void) buffer->read(size);
 }
 
 Answer::~Answer()

@@ -21,8 +21,8 @@ void worker(const Zone& zone, const QueryFile& queries)
 			WriteBuffer head { tmp, sizeof tmp };
 			ReadBuffer body { nullptr, 0 } ;
 
-			Context ctx(zone, in, head);
-			(void) ctx.parse(body);
+			Context ctx(zone, in, head, body);
+			(void) ctx.execute();
 			if (head.position() >= 12) {
 				auto rcode = head[3] & 0x0f;
 				++rcodes[rcode];

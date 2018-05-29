@@ -12,7 +12,7 @@ CXXFLAGS = -g -O3 -std=c++11 -Wall -Werror -Wno-error=pragmas $(INCS) -D_POSIX_S
 LDFLAGS =
 
 BIN = lightning benchmark
-COMMON_OBJS = context.o parser.o zone.o answer.o util.o
+COMMON_OBJS = context.o zone.o answer.o util.o
 LIBS += -lpthread -lresolv
 
 .PHONY:	all clean
@@ -33,7 +33,6 @@ benchmark.o:	zone.h queryfile.h timer.h
 context.o:	context.h
 main.o:		server.h
 packet.o:	packet.h util.h
-parser.o:	context.h
 queryfile.o:	queryfile.h util.h
 server.o:	server.h context.h util.h
 timer.o:	timer.h

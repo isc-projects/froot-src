@@ -16,15 +16,15 @@ private:
 	const Zone&		zone;
 	ReadBuffer&		in;
 	WriteBuffer&		head;
+	ReadBuffer&		body;
 
-public:
+private:
 	std::string		qname;
 	uint16_t		qtype;
 	uint16_t		qdsize;
 	uint16_t		bufsize;
 
 	uint8_t			qlabels;
-	uint8_t			rcode;
 
 	bool			match;
 	bool			edns;
@@ -32,7 +32,11 @@ public:
 	const Answer*		answer;
 
 public:
-	Context(const Zone& zone, ReadBuffer& in, WriteBuffer& head);
+	uint8_t			rcode;
 
-	bool parse(ReadBuffer& body);
+public:
+	Context(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer& body);
+	~Context();
+
+	bool execute();
 };
