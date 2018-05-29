@@ -11,7 +11,7 @@
 #include <netinet/udp.h>
 
 #include "server.h"
-#include "parser.h"
+#include "context.h"
 #include "util.h"
 
 void Server::load(const std::string& filename)
@@ -28,6 +28,8 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	ReadBuffer  in	 { buffer, buflen };
 	WriteBuffer head { headbuf, sizeof headbuf };
 	ReadBuffer  body { nullptr, 0 };
+
+	Context ctx(zone, in, head);
 
 	auto head_l3_header = head.base();
 
@@ -88,7 +90,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	udp.uh_sum = 0;
 	udp.uh_ulen = 0;
 
-	if (parse_query(zone, in, head, body)) {
+	if (ctx.parse(body)) {
 
 		auto payload = head.position() + body.size();
 

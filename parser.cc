@@ -2,7 +2,6 @@
 #include <arpa/inet.h>
 #include <ldns/packet.h>
 
-#include "parser.h"
 #include "context.h"
 #include "util.h"
 
@@ -114,25 +113,23 @@ static bool parse_edns(ReadBuffer& in, uint16_t bufsize, bool& do_bit)
 }
 #endif
 
-static void lookup(Context& ctx, const Zone& zone, ReadBuffer& in, size_t& qdsize)
+void Context::lookup()
 {
-	qdsize = 0;
-
 	size_t qdstart = in.position();
 
-	if (!parse_qname(in, ctx.qname, ctx.qlabels)) {
-		ctx.rcode = LDNS_RCODE_FORMERR;
+	if (!parse_qname(in, qname, qlabels)) {
+		rcode = LDNS_RCODE_FORMERR;
 		return;
 	}
 
 	// ensure there's room for qtype and qclass
 	if (in.available() < 4) {
-		ctx.rcode = LDNS_RCODE_FORMERR;
+		rcode = LDNS_RCODE_FORMERR;
 		return;
 	}
 
 	// read qtype and qclass
-	ctx.qtype = ntohs(in.read<uint16_t>());// qtype
+	qtype = ntohs(in.read<uint16_t>());// qtype
 	auto qclass = ntohs(in.read<uint16_t>());	// qclass
 
 	// determine question section length for copying
@@ -142,34 +139,30 @@ static void lookup(Context& ctx, const Zone& zone, ReadBuffer& in, size_t& qdsiz
 
 	// reject unknown qclasses
 	if (qclass != LDNS_RR_CLASS_IN) {
-		ctx.rcode = LDNS_RCODE_NOTIMPL;
+		rcode = LDNS_RCODE_NOTIMPL;
 		return;
 	}
 
 	// TODO: EDNS decoding
-	ctx.do_bit = false;
+	do_bit = false;
 
 	// apparent bug in AF_PACKET sets min size to 46
 	if (in.available() > 0 && in.size() > 46) {
-		ctx.rcode = LDNS_RCODE_FORMERR;	// trailing garbage
+		rcode = LDNS_RCODE_FORMERR;	// trailing garbage
 		return;
 	}
 
-	auto& data = zone.lookup(ctx.qname, ctx.match);
-	ctx.rcode = ctx.match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
-	ctx.answer = data.answer(ctx);
+	auto& data = zone.lookup(qname, match);
+	rcode = match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
+	answer = data.answer(*this);
 }
 
-bool parse_query(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer& body)
+bool Context::parse(ReadBuffer& body)
 {
-	Context ctx;
-
 	// drop invalid packets
 	if (!legal_header(in)) {
 		return false;
 	}
-
-	size_t qdsize = 0;
 
 	// extract DNS header
 	auto rx_hdr = in.read<dnshdr>();
@@ -178,18 +171,16 @@ bool parse_query(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer
 	auto qdstart = in.current();
 
 	if (!valid_header(rx_hdr)) {
-		ctx.rcode = LDNS_RCODE_FORMERR;
+		rcode = LDNS_RCODE_FORMERR;
 	} else {
 		uint8_t opcode = (ntohs(rx_hdr.flags) >> 11) & 0x0f;
 		if (opcode != LDNS_PACKET_QUERY) {
-			ctx.rcode = LDNS_RCODE_NOTIMPL;
+			rcode = LDNS_RCODE_NOTIMPL;
 		} else {
-			lookup(ctx, zone, in, qdsize);
-			body = ctx.answer->data();
+			lookup();
+			body = answer->data();
 		}
 	}
-
-	auto *answer = ctx.answer;
 
 	// craft response header
 	auto& tx_hdr = head.write<dnshdr>();
@@ -198,7 +189,7 @@ bool parse_query(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer
 	uint16_t flags = ntohs(rx_hdr.flags);
 	flags &= 0x0110;		// copy RD + CD
 	flags |= 0x8000;		// QR
-	flags |= (ctx.rcode & 0x0f);	// set rcode
+	flags |= (rcode & 0x0f);	// set rcode
 	if (answer->authoritative()) {
 		flags |= 0x0400;	// AA bit
 	}
@@ -206,9 +197,9 @@ bool parse_query(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer
 
 	// section counts
 	tx_hdr.qdcount = htons(qdsize ? 1 : 0);
-	tx_hdr.ancount = htons(answer ? answer->ancount : 0);
-	tx_hdr.nscount = htons(answer ? answer->nscount : 0);
-	tx_hdr.arcount = htons(answer ? answer->arcount : 0);
+	tx_hdr.ancount = htons(answer->ancount);
+	tx_hdr.nscount = htons(answer->nscount);
+	tx_hdr.arcount = htons(answer->arcount);
 
 	// copy question section
 	::memcpy(head.write(qdsize), qdstart, qdsize);
