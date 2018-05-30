@@ -5,23 +5,27 @@
 
 #include <ldns/dnssec.h>
 
+#include "context.h"
 #include "answer.h"
-
-class Context;
 
 class NameData {
 
 private:
 	static Answer*		empty;
-	Answer*			negative;
-	Answer*			positive;
+
+	Answer**		plain;
+	Answer**		dnssec;
+
+private:
+	void generate_root_answers(const ldns_dnssec_zone* zone);
+	void generate_tld_answers(const ldns_dnssec_name*name, const ldns_dnssec_zone* zone);
 
 public:
 	NameData(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone);
 	~NameData();
 
 public:
-	const Answer* answer(const Context& ctx) const;
+	const Answer* answer(Context::Type type, bool do_bit) const;
 };
 
 class Zone {

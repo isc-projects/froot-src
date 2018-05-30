@@ -3,7 +3,10 @@
 #include <stdexcept>
 
 #include <arpa/inet.h>
+#include <ldns/ldns.h>
 #include <ldns/dname.h>
+#include <ldns/rr.h>
+#include <ldns/rr_functions.h>
 #include <ldns/dnssec.h>
 #include <ldns/dnssec_sign.h>
 
@@ -11,49 +14,124 @@
 #include "zone.h"
 #include "util.h"
 
-const Answer* NameData::answer(const Context& ctx) const
+const Answer* NameData::answer(Context::Type type, bool do_bit) const
 {
-	if (ctx.rcode == LDNS_RCODE_NXDOMAIN) {
-		return negative;
+	Answer* a = nullptr;
+
+	if (do_bit) {
+		a = dnssec[type];
 	} else {
-		return positive;
+		a = plain[type];
 	}
+
+	return a ? a : Answer::empty;
+}
+
+static void find_glue(RRList& rrl, const ldns_dnssec_rrsets* rrset, const ldns_dnssec_zone* zone)
+{
+	if (rrset) {
+		auto rrs = rrset->rrs;
+		while (rrs) {
+			auto name = ldns_rr_ns_nsdname(rrs->rr);
+			rrl.append(ldns_dnssec_zone_find_rrset(zone, name, LDNS_RR_TYPE_A));
+			rrl.append(ldns_dnssec_zone_find_rrset(zone, name, LDNS_RR_TYPE_AAAA));
+			rrs = rrs->next;
+		}
+	}
+}
+
+void NameData::generate_root_answers(const ldns_dnssec_zone* zone)
+{
+	RRList empty, soa, ns, dnskey, nsec, glue;
+
+	auto name = zone->soa;
+	soa.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_SOA));
+	ns.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_NS));
+	dnskey.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_DNSKEY));
+	nsec.append(name->nsec);
+
+	// fill out glue
+	auto ns_rrl = ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_NS);
+	find_glue(glue, ns_rrl, zone);
+
+	plain[Context::Type::ctx_root_soa] = new Answer(soa, ns, glue, true);
+	plain[Context::Type::ctx_root_ns] = new Answer(ns, empty, glue, true);
+	plain[Context::Type::ctx_root_dnskey] = new Answer(dnskey, empty, empty, true);
+	plain[Context::Type::ctx_root_nsec] = new Answer(nsec, ns, glue, true);
+	plain[Context::Type::ctx_root_nodata] = new Answer(empty, soa, empty, true);
+
+	// add RRSIGS for the NSEC records
+	nsec.append(name->nsec_signatures);
+
+	dnssec[Context::Type::ctx_root_soa] = new Answer(soa, ns, glue, true, true);
+	dnssec[Context::Type::ctx_root_ns] = new Answer(ns, empty, glue, true, true);
+	dnssec[Context::Type::ctx_root_dnskey] = new Answer(dnskey, empty, empty, true, true);
+	dnssec[Context::Type::ctx_root_nsec] = new Answer(nsec, ns, glue, true, true);
+	dnssec[Context::Type::ctx_root_nodata] = new Answer(empty, soa, empty, true, true);
+}
+
+void NameData::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone)
+{
+	RRList empty, soa, ns, ds, glue;
+
+	soa.append(ldns_dnssec_name_find_rrset(zone->soa, LDNS_RR_TYPE_SOA));
+	ns.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_NS));
+	ds.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_DS));
+
+	// fill out glue
+	auto ns_rrl = ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_NS);
+	find_glue(glue, ns_rrl, zone);
+
+	// create unsigned answers
+	plain[Context::Type::ctx_tld_ds] = new Answer(ds, empty, empty, true);
+	plain[Context::Type::ctx_tld_referral] = new Answer(empty, ns, glue, false);
+	plain[Context::Type::ctx_nxdomain] = new Answer(empty, soa, empty, true);
+
+	// signed SOA in NXD requires NSEC records
+	soa.append(name->nsec);
+	soa.append(name->nsec_signatures);
+	soa.append(zone->soa->nsec);
+	soa.append(zone->soa->nsec_signatures);
+
+	// signed referral requires signed DS record
+	ns.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_DS));
+
+	// create signed answers
+	dnssec[Context::Type::ctx_tld_ds] = new Answer(ds, empty, empty, true, true);
+	dnssec[Context::Type::ctx_tld_referral] = new Answer(empty, ns, glue, false, true);
+	dnssec[Context::Type::ctx_nxdomain] = new Answer(empty, soa, empty, true, true);
 }
 
 NameData::NameData(const ldns_dnssec_name* name, const ldns_dnssec_zone *zone)
 {
-	// ldns_rr_list* glue_a = nullptr;
-	// ldns_rr_list* glue_aaaa = nullptr;
+	plain = new Answer*[Context::Type::ctx_size];
+	dnssec = new Answer*[Context::Type::ctx_size];
 
-	RRList empty, ns, soa, glue;
-
-	soa.append(ldns_dnssec_name_find_rrset(zone->soa, LDNS_RR_TYPE_SOA));
-
-	auto rrset = name->rrsets;
-	while (rrset) {
-
-		if (rrset->type == LDNS_RR_TYPE_NS) {
-			ns.append(rrset);
-		}
-
-		// follow list
-		rrset = rrset->next;
+	for (auto i = 0U; i < Context::Type::ctx_size; ++i) {
+		plain[i] = nullptr;
+		dnssec[i] = nullptr;
 	}
 
-	negative = new Answer(soa, empty, empty, true);
-	positive = new Answer(empty, ns, empty, false);
-
-	// nsec = ldns_rr_clone(name->nsec);
-	// nsec_sigs = LDNS_rr_list_new_frm_dnssec_rrs(name->nsec_signatures);
+	if (name == zone->soa) {
+		generate_root_answers(zone);
+	} else {
+		generate_tld_answers(name, zone);
+	}
 }
 
 NameData::~NameData()
 {
-	// ldns_rr_free(nsec);
-	// ldns_rr_list_deep_free(nsec_sigs);
+	for (int i = 0U; i < Context::Type::ctx_size; ++i) {
+		if (plain[i]) {
+			delete plain[i];
+		}
+		if (dnssec[i]) {
+			delete dnssec[i];
+		}
+	}
 
-	delete negative;
-	delete positive;
+	delete[] dnssec;
+	delete[] plain;
 }
 
 void Zone::add_name(const ldns_dnssec_name* name)

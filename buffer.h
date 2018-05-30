@@ -65,17 +65,6 @@ inline WriteBuffer::WriteBuffer(const uint8_t* base, size_t size)
 {
 }
 
-#if 0
-inline ReadBuffer& ReadBuffer::operator=(const Buffer& rhs)
-{
-	_base = const_cast<uint8_t*>(rhs.base());
-	_size = rhs.size();
-	_position = rhs.position();
-
-	return *this;
-}
-#endif
-
 inline void Buffer::reset() {
 	_position = 0;
 };

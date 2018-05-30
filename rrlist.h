@@ -12,9 +12,9 @@ private:
 public:
 	void append(const ldns_rr* rr);
 	void append(const ldns_dnssec_rrs* rrs);
-	void append(const ldns_dnssec_rrsets* rrset, bool sigs = false);
+	void append(const ldns_dnssec_rrsets* rrset);
 
-	void to_buffer_wire(ldns_buffer* buf, int section) const;
+	size_t to_buffer_wire(ldns_buffer* buf, int section, bool sigs = false) const;
 	size_t count() const;
 
 public:

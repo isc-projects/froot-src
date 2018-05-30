@@ -104,15 +104,12 @@ static bool parse_qname(ReadBuffer& in, std::string& qname, uint8_t& labels)
 	return true;
 }
 
-#if 0
-static bool parse_edns(ReadBuffer& in, uint16_t bufsize, bool& do_bit)
+void Context::parse_edns()
 {
 	bufsize = 512;
+	edns = true;
 	do_bit = false;
-
-	return true;
 }
-#endif
 
 void Context::lookup()
 {
@@ -145,7 +142,7 @@ void Context::lookup()
 	}
 
 	// TODO: EDNS decoding
-	do_bit = false;
+	do_bit = true;
 
 	// apparent bug in AF_PACKET sets min size to 46
 	if (in.available() > 0 && in.size() > 46) {
@@ -155,7 +152,8 @@ void Context::lookup()
 
 	auto& data = zone.lookup(qname, match);
 	rcode = match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
-	answer = data.answer(*this);
+
+	answer = data.answer(type(), do_bit);
 }
 
 bool Context::execute()
@@ -206,6 +204,64 @@ bool Context::execute()
 	::memcpy(head.write(qdsize), qdstart_p, qdsize);
 
 	return true;
+}
+
+/*
+ * answer types:
+ *
+ *   . SOA      [ SOA, NS, glue ] + AA
+ *   . NS       [ NS, empty, glue ] + AA
+ *   . DNSKEY   [ DNSKEY, empty, empty ] + AA
+ *   . NSEC     [ NSEC, NS, glue ] + AA
+ *   . xxx      [ empty, SOA, empty ] + AA
+ *
+ *   foo DS     [ DS, empty, empty ] + AA
+ *   foo xxx    [ empty, NS, glue ] -> "referral"
+ *   *.foo xxx  referral
+ *
+ *   nxd        [ empty, SOA, empty ] + AA
+ *
+ *   with DNSSEC:
+ *
+ *   . SOA      [ SOA*, NS*, glue ] + AA
+ *   . NS       [ NS*, empty, glue ] + AA
+ *   . DNSKEY   [ DNSKEY*, empty, empty ] + AA
+ *   . NSEC     [ NSEC*, NS*, glue ] + AA
+ *   . xxx      [ empty, SOA* + NSEC*, empty ] + AA
+ *
+ *   foo DS     [ DS*, empty, empty ] + AA
+ *   foo xxx    [ empty, NS + DS*, glue ] -> "signed referral"
+ *   *.foo xxx  signed referral
+ *
+ *   nxd        [ empty, SOA* + NSEC*, empty ] + AA
+ *
+ */
+
+Context::Type Context::type() const
+{
+	if (!match) {
+		return ctx_nxdomain;
+	} else if (qlabels > 1) {
+		return ctx_tld_referral;
+	} else if (qlabels == 1) {
+		if (qtype == LDNS_RR_TYPE_DS) {
+			return ctx_tld_ds;
+		} else {
+			return ctx_tld_referral;
+		}
+	} else  {
+		if (qtype == LDNS_RR_TYPE_SOA) {
+			return ctx_root_soa;
+		} else if (qtype == LDNS_RR_TYPE_NS) {
+			return ctx_root_ns;
+		} else if (qtype == LDNS_RR_TYPE_NSEC) {
+			return ctx_root_nsec;
+		} else if (qtype == LDNS_RR_TYPE_DNSKEY) {
+			return ctx_root_dnskey;
+		} else {
+			return ctx_root_nodata;
+		}
+	}
 }
 
 Context::Context(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer& body) :

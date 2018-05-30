@@ -42,7 +42,7 @@ Answer* Answer::empty = new Answer(RRList(), RRList(), RRList(), false);
 
 ReadBuffer Answer::data() const
 {
-	return *buffer;
+	return ReadBuffer { buf, size };
 }
 
 bool Answer::authoritative() const
@@ -50,29 +50,21 @@ bool Answer::authoritative() const
 	return aa_bit;
 }
 
-Answer::Answer(const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit) : aa_bit(aa_bit)
+Answer::Answer(const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit, bool sigs) : aa_bit(aa_bit)
 {
 	size_t n = 4096;
 	auto lbuf = ldns_buffer_new(n);
 
-	ancount = an.count();
-	nscount = ns.count();
-	arcount = ar.count();
+	ancount = an.to_buffer_wire(lbuf, LDNS_SECTION_ANSWER, sigs);
+	nscount = ns.to_buffer_wire(lbuf, LDNS_SECTION_AUTHORITY, sigs);
+	arcount = ar.to_buffer_wire(lbuf, LDNS_SECTION_ADDITIONAL, sigs);
 
-	an.to_buffer_wire(lbuf, LDNS_SECTION_ANSWER);
-	ns.to_buffer_wire(lbuf, LDNS_SECTION_AUTHORITY);
-	ar.to_buffer_wire(lbuf, LDNS_SECTION_ADDITIONAL);
-
-	auto size = ldns_buffer_position(lbuf);
-	auto p = reinterpret_cast<uint8_t*>(ldns_buffer_export(lbuf));
+	size = ldns_buffer_position(lbuf);
+	buf = reinterpret_cast<uint8_t*>(ldns_buffer_export(lbuf));
 	ldns_buffer_free(lbuf);
-
-	buffer = new ReadBuffer(p, size);
 }
 
 Answer::~Answer()
 {
-	auto p = buffer->base();
-	delete buffer;
-	free(const_cast<void*>(p));
+	free(buf);
 }

@@ -7,7 +7,8 @@
 
 class Answer {
 
-	ReadBuffer*		buffer;
+	uint8_t*		buf;
+	size_t			size;
 
 public:
 	uint16_t		ancount = 0;
@@ -16,7 +17,7 @@ public:
 	bool			aa_bit = false;
 
 public:
-	Answer(const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit);
+	Answer(const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit, bool sigs = false);
 	~Answer();
 
 	ReadBuffer		data() const;
