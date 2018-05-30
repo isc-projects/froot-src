@@ -67,10 +67,13 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 		ip.ip_dst = l3.ip_src;
 
 	} else if (version == 6) {
+
+		// TODO: IPv6 support
 		return;
+
 	}
 
-	// consume L4 header
+	// consume L4 UDP header
 	if (in.available() < sizeof(udphdr)) return;
 	auto& l4 = in.read<udphdr>();
 

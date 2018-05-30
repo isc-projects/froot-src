@@ -1,8 +1,9 @@
 #pragma once
 
-#include "buffer.h"
-
 #include <ldns/dnssec.h>
+
+#include "buffer.h"
+#include "rrlist.h"
 
 class Answer {
 
@@ -15,7 +16,7 @@ public:
 	bool			aa_bit = false;
 
 public:
-	Answer(ldns_rr_list* an, ldns_rr_list* ns, ldns_rr_list* ar, bool aa_bit);
+	Answer(const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit);
 	~Answer();
 
 	ReadBuffer		data() const;

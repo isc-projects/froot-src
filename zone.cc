@@ -6,22 +6,10 @@
 #include <ldns/dname.h>
 #include <ldns/dnssec.h>
 #include <ldns/dnssec_sign.h>
-#include <ldns/wire2host.h>
-#include <ldns/host2wire.h>
 
 #include "context.h"
 #include "zone.h"
 #include "util.h"
-
-static ldns_rr_list* LDNS_rr_list_new_frm_dnssec_rrs(ldns_dnssec_rrs *rrs)
-{
-        auto rr_list = ldns_rr_list_new();
-        while (rrs) {
-                  ldns_rr_list_push_rr(rr_list, ldns_rr_clone(rrs->rr));
-                  rrs = rrs->next;
-        }
-        return rr_list;
-}
 
 const Answer* NameData::answer(const Context& ctx) const
 {
@@ -36,22 +24,24 @@ NameData::NameData(const ldns_dnssec_name* name, const ldns_dnssec_zone *zone)
 {
 	// ldns_rr_list* glue_a = nullptr;
 	// ldns_rr_list* glue_aaaa = nullptr;
-	ldns_rr_list* ns = nullptr;
-	auto soa = LDNS_rr_list_new_frm_dnssec_rrs(ldns_dnssec_name_find_rrset(zone->soa, LDNS_RR_TYPE_SOA)->rrs);
+
+	RRList empty, ns, soa, glue;
+
+	soa.append(ldns_dnssec_name_find_rrset(zone->soa, LDNS_RR_TYPE_SOA));
 
 	auto rrset = name->rrsets;
 	while (rrset) {
 
 		if (rrset->type == LDNS_RR_TYPE_NS) {
-			ns = LDNS_rr_list_new_frm_dnssec_rrs(rrset->rrs);
+			ns.append(rrset);
 		}
 
 		// follow list
 		rrset = rrset->next;
 	}
 
-	negative = new Answer(soa, nullptr, nullptr, true);
-	positive = new Answer(nullptr, ns, nullptr, false);
+	negative = new Answer(soa, empty, empty, true);
+	positive = new Answer(empty, ns, empty, false);
 
 	// nsec = ldns_rr_clone(name->nsec);
 	// nsec_sigs = LDNS_rr_list_new_frm_dnssec_rrs(name->nsec_signatures);
@@ -128,5 +118,10 @@ Zone::Zone()
 
 Zone::~Zone()
 {
+	auto iter = data.begin();
+	while (iter != data.end()) {
+		delete iter->second;
+		++iter;
+	}
 	ldns_dnssec_zone_deep_free(zone);
 }
