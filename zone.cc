@@ -174,6 +174,10 @@ void Zone::load(const std::string& filename)
 
 	auto origin = ldns_dname_new_frm_str(".");
 	auto fp = fopen(filename.c_str(), "r");
+	if (!fp) {
+		throw_errno("opening zone file");
+	}
+
 	auto status = ldns_dnssec_zone_new_frm_fp(&zone, fp, origin, 3600, LDNS_RR_CLASS_IN);
 	fclose(fp);
 	ldns_rdf_deep_free(origin);
