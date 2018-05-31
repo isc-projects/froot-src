@@ -1,17 +1,19 @@
 #pragma once
 
 #include <cstdint>
+#include <sys/socket.h>		// for iovec
 
 class Buffer {
 
 protected:
 
-	uint8_t*		_base;
-	size_t			_size;
-	size_t			_position;
+	uint8_t*		_base = nullptr;
+	size_t			_size = 0;
+	size_t			_position = 0;
 
 protected:
 	Buffer(uint8_t* base, size_t size);
+	Buffer() {};
 
 public:
 	size_t size() const;
@@ -34,6 +36,7 @@ public:
 	template<typename T> const T* read_array(size_t n);
 
 	const uint8_t& operator[](size_t x) const;
+	operator iovec() const;
 };
 
 class WriteBuffer : public Buffer {
@@ -49,9 +52,10 @@ public:
 	template<typename T> T* write_array(size_t n);
 
 	uint8_t& operator[](size_t x) const;
+	operator iovec() const;
 };
 
-inline Buffer::Buffer(uint8_t* base, size_t size) : _base(base), _size(size), _position(0)
+inline Buffer::Buffer(uint8_t* base, size_t size) : _base(base), _size(size)
 {
 }
 
@@ -131,4 +135,14 @@ T& WriteBuffer::write() {
 template<typename T>
 T* WriteBuffer::write_array(size_t n) {
 	return reinterpret_cast<T*>(write(n * sizeof(T)));
+}
+
+inline ReadBuffer::operator iovec() const
+{
+	return iovec { _base, _size };
+}
+
+inline WriteBuffer::operator iovec() const
+{
+	return iovec { _base, _position };
 }

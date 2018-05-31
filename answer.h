@@ -1,5 +1,6 @@
 #pragma once
 
+#include <sys/socket.h>		// for iovec
 #include <ldns/dnssec.h>
 
 #include "buffer.h"
@@ -7,7 +8,7 @@
 
 class Answer {
 
-	uint8_t*		buf;
+	void*			buf;
 	size_t			size;
 
 public:
@@ -20,7 +21,7 @@ public:
 	Answer(const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit, bool sigs = false);
 	~Answer();
 
-	ReadBuffer		data() const;
+				operator iovec() const;
 	bool			authoritative() const;
 
 public:

@@ -40,9 +40,9 @@
 
 Answer* Answer::empty = new Answer(RRList(), RRList(), RRList(), false);
 
-ReadBuffer Answer::data() const
+Answer::operator iovec() const
 {
-	return ReadBuffer { buf, size };
+	return iovec { buf, size };
 }
 
 bool Answer::authoritative() const
@@ -60,7 +60,7 @@ Answer::Answer(const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit
 	arcount = ar.to_buffer_wire(lbuf, LDNS_SECTION_ADDITIONAL, sigs);
 
 	size = ldns_buffer_position(lbuf);
-	buf = reinterpret_cast<uint8_t*>(ldns_buffer_export(lbuf));
+	buf = ldns_buffer_export(lbuf);
 	ldns_buffer_free(lbuf);
 }
 

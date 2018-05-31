@@ -11,20 +11,21 @@ void worker(const Zone& zone, const QueryFile& queries)
 {
 	std::map<int, uint64_t> rcodes;
 	{
+		std::vector<iovec> iov;
+		iov.reserve(2);
+
 		BenchmarkTimer t("10M queries");
 		for (size_t i = 0; i < 1e7; ++i) {
 
 			auto& q = queries[i];
-			uint8_t tmp[512];
-
 			ReadBuffer in { q.data(), q.size() };
-			WriteBuffer head { tmp, sizeof tmp };
-			ReadBuffer body { nullptr, 0 } ;
+			iov.clear();
 
-			Context ctx(zone, in, head, body);
-			(void) ctx.execute();
-			if (head.position() >= 12) {
-				auto rcode = head[3] & 0x0f;
+			Context ctx(zone, in);
+			(void) ctx.execute(iov);
+			if (iov.size() >= 1) {
+				auto p = reinterpret_cast<uint8_t*>(iov[0].iov_base);
+				auto rcode = p[3] & 0x0f;
 				++rcodes[rcode];
 			}
 		}

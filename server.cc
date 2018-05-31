@@ -29,8 +29,6 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	WriteBuffer head { headbuf, sizeof headbuf };
 	ReadBuffer  body { nullptr, 0 };
 
-	Context ctx(zone, in, head, body);
-
 	auto head_l3_header = head.base();
 
 	// extract L3 header
@@ -93,28 +91,28 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	udp.uh_sum = 0;
 	udp.uh_ulen = 0;
 
-	if (ctx.execute()) {
+	std::vector<iovec> iov = { { head.base(), head.position() } };
 
-		auto payload = head.position() + body.size();
+	// created on stack here to avoid use of the heap
+	Context ctx(zone, in);
+
+	if (ctx.execute(iov)) {
+
+		// calculate total length
+		size_t ip_len = 0;
+		for (auto v : iov) {
+			ip_len += v.iov_len;
+		}
 
 		// update IP length
 		if (version == 4) {
 			auto& ip = *reinterpret_cast<struct ip*>(head_l3_header);
-			ip.ip_len = htons(payload);
+			ip.ip_len = htons(ip_len);
 			ip.ip_sum = checksum(&ip, sizeof ip);
 		}
 
-		// generate the chunks to be sent
-		std::vector<iovec> iov = { { head.base(), head.position() } };
-		if (body.size()) {
-			iov.push_back(iovec {
-				const_cast<void*>(body.base()),
-				body.size()
-			});
-		}
-
 		// update UDP length
-		udp.uh_ulen = htons(payload - udpoff);
+		udp.uh_ulen = htons(ip_len - udpoff);
 
 		// construct response message
 		msghdr msg;

@@ -15,6 +15,16 @@ struct dnshdr {
 	uint16_t	arcount;
 };
 
+struct __attribute__((__packed__)) edns_opt_rr {
+	uint8_t		name;
+	uint16_t	type;
+	uint16_t	bufsize;
+	uint8_t		ercode;
+	uint8_t		version;
+	uint16_t	flags;
+	uint16_t	rdlen;
+};
+
 //
 // reject headers that don't merit any response at all
 //
@@ -147,10 +157,10 @@ void Context::parse_edns()
 	(void) in.read(rdlen);
 
 	// we got a valid EDNS opt RR, so we need to return one
-	edns = true;
+	has_edns = true;
 	do_bit = (flags & 0x8000);
 
-	if (version > 1) {
+	if (version > 0) {
 		rcode = 16;
 	}
 }
@@ -178,6 +188,12 @@ void Context::parse_question()
 	// returning before this point will result in an
 	// empty question section in responses
 	qdsize = in.position() - qdstart;
+
+	// reject meta queries
+	if (qtype == LDNS_RR_TYPE_OPT || (qtype >= 128 && qtype <= 255)) {
+		rcode = LDNS_RCODE_NOTIMPL;
+		return;
+	}
 
 	// reject unknown qclasses
 	if (qclass != LDNS_RR_CLASS_IN) {
@@ -212,10 +228,9 @@ void Context::perform_lookup()
 	auto& data = zone.lookup(qname, match);
 	rcode = match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
 	answer = data.answer(type(), do_bit);
-	body = answer->data();
 }
 
-bool Context::execute()
+bool Context::execute(std::vector<iovec>& out)
 {
 	// drop invalid packets
 	if (!legal_header(in)) {
@@ -256,10 +271,29 @@ bool Context::execute()
 	tx_hdr.qdcount = htons(qdsize ? 1 : 0);
 	tx_hdr.ancount = htons(answer->ancount);
 	tx_hdr.nscount = htons(answer->nscount);
-	tx_hdr.arcount = htons(answer->arcount);
+	tx_hdr.arcount = htons(answer->arcount + has_edns);
 
-	// copy question section
+	// copy question section and save
 	::memcpy(head.write(qdsize), &in[qdstart], qdsize);
+	out.push_back(head);
+
+	// save answer
+	if (answer) {
+		out.push_back(*answer);
+	}
+
+	// add OPT RR if needed
+	if (has_edns) {
+		auto& opt = edns.write<edns_opt_rr>();
+		opt.name = 0;		// "."
+		opt.type = htons(LDNS_RR_TYPE_OPT);
+		opt.bufsize = htons(1480);
+		opt.ercode = (rcode >> 4);
+		opt.version = 0;
+		opt.flags = htons(do_bit ? 0x8000 : 0);
+		opt.rdlen = 0;
+		out.push_back(edns);
+	}
 
 	return true;
 }
@@ -322,9 +356,8 @@ Context::Type Context::type() const
 	}
 }
 
-Context::Context(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer& body) :
-	zone(zone), in(in), head(head), body(body),
-	bufsize(512), match(false), edns(false), do_bit(false)
+Context::Context(const Zone& zone, ReadBuffer& in) :
+	zone(zone), in(in)
 {
 	answer = Answer::empty;
 }
