@@ -24,7 +24,9 @@ public:
 
 private:
 	void parse_edns();
-	void lookup();
+	void parse_question();
+	void parse_packet();
+	void perform_lookup();
 
 private:
 	const Zone&		zone;
@@ -35,6 +37,7 @@ private:
 private:
 	std::string		qname;
 	uint16_t		qtype;
+	uint16_t		qdstart;
 	uint16_t		qdsize;
 	uint16_t		bufsize;
 
@@ -46,7 +49,7 @@ private:
 	const Answer*		answer;
 
 public:
-	uint8_t			rcode;
+	uint16_t		rcode;
 
 public:
 	Context(const Zone& zone, ReadBuffer& in, WriteBuffer& head, ReadBuffer& body);

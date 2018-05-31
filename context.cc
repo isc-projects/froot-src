@@ -62,7 +62,7 @@ static bool valid_header(const dnshdr& h)
 //
 // find last label of qname
 //
-static bool parse_qname(ReadBuffer& in, std::string& qname, uint8_t& labels)
+static bool parse_name(ReadBuffer& in, std::string& name, uint8_t& labels)
 {
 	auto total = 0U;
 	auto last = in.position();
@@ -92,30 +92,74 @@ static bool parse_qname(ReadBuffer& in, std::string& qname, uint8_t& labels)
 		}
 
 		// consume the label
-		(void) in.read_array<uint8_t>(c);
+		(void) in.read(c);
 	}
 
 	// should now be pointing at one beyond the root label
-	auto qname_length = in.position() - last - 1;
+	auto name_length = in.position() - last - 1;
 
 	// make lower cased qname
-	qname.assign(strlower(&in[last], qname_length));
+	name.assign(strlower(&in[last], name_length));
 
 	return true;
 }
 
 void Context::parse_edns()
 {
-	bufsize = 512;
+	// nothing found
+	if (in.available() == 0) {
+		return;
+	}
+
+	// impossible EDNS length
+	if (in.available() > 0 && in.available() < 11) {
+		rcode = LDNS_RCODE_FORMERR;
+		return;
+	}
+
+	// OPT RR must have '.' (\0) as owner name
+	auto ch = in.read<uint8_t>();
+	if (ch != 0) {
+		rcode = LDNS_RCODE_FORMERR;
+		return;
+	}
+
+	// check the RR type
+	auto type = ntohs(in.read<uint16_t>());
+	if (type != LDNS_RR_TYPE_OPT) {
+		rcode = LDNS_RCODE_FORMERR;
+		return;
+	}
+
+	bufsize = ntohs(in.read<uint16_t>());
+	(void) in.read<uint8_t>();	// extended rcode
+	auto version = in.read<uint8_t>();
+	auto flags = ntohs(in.read<uint16_t>());
+	auto rdlen = ntohs(in.read<uint16_t>());
+
+	// packet was too short - FORMERR
+	if (in.available() < rdlen) {
+		rcode = LDNS_RCODE_FORMERR;
+		return;
+	}
+
+	// skip the EDNS options
+	(void) in.read(rdlen);
+
+	// we got a valid EDNS opt RR, so we need to return one
 	edns = true;
-	do_bit = false;
+	do_bit = (flags & 0x8000);
+
+	if (version > 1) {
+		rcode = 16;
+	}
 }
 
-void Context::lookup()
+void Context::parse_question()
 {
-	size_t qdstart = in.position();
+	qdstart = in.position();
 
-	if (!parse_qname(in, qname, qlabels)) {
+	if (!parse_name(in, qname, qlabels)) {
 		rcode = LDNS_RCODE_FORMERR;
 		return;
 	}
@@ -127,8 +171,8 @@ void Context::lookup()
 	}
 
 	// read qtype and qclass
-	qtype = ntohs(in.read<uint16_t>());// qtype
-	auto qclass = ntohs(in.read<uint16_t>());	// qclass
+	qtype = ntohs(in.read<uint16_t>());
+	auto qclass = ntohs(in.read<uint16_t>());
 
 	// determine question section length for copying
 	// returning before this point will result in an
@@ -140,20 +184,35 @@ void Context::lookup()
 		rcode = LDNS_RCODE_NOTIMPL;
 		return;
 	}
+}
 
-	// TODO: EDNS decoding
-	do_bit = true;
+void Context::parse_packet()
+{
+	rcode = LDNS_RCODE_NOERROR;
+
+	parse_question();
+	if (rcode != LDNS_RCODE_NOERROR) {
+		return;
+	}
+
+	parse_edns();
+	if (rcode != LDNS_RCODE_NOERROR) {
+		return;
+	}
 
 	// apparent bug in AF_PACKET sets min size to 46
 	if (in.available() > 0 && in.size() > 46) {
 		rcode = LDNS_RCODE_FORMERR;	// trailing garbage
 		return;
 	}
+}
 
+void Context::perform_lookup()
+{
 	auto& data = zone.lookup(qname, match);
 	rcode = match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
-
 	answer = data.answer(type(), do_bit);
+	body = answer->data();
 }
 
 bool Context::execute()
@@ -166,9 +225,6 @@ bool Context::execute()
 	// extract DNS header
 	auto rx_hdr = in.read<dnshdr>();
 
-	// mark start of question section
-	auto qdstart_p = in.current();
-
 	if (!valid_header(rx_hdr)) {
 		rcode = LDNS_RCODE_FORMERR;
 	} else {
@@ -176,8 +232,10 @@ bool Context::execute()
 		if (opcode != LDNS_PACKET_QUERY) {
 			rcode = LDNS_RCODE_NOTIMPL;
 		} else {
-			lookup();
-			body = answer->data();
+			parse_packet();
+			if (rcode == LDNS_RCODE_NOERROR) {
+				perform_lookup();
+			}
 		}
 	}
 
@@ -201,7 +259,7 @@ bool Context::execute()
 	tx_hdr.arcount = htons(answer->arcount);
 
 	// copy question section
-	::memcpy(head.write(qdsize), qdstart_p, qdsize);
+	::memcpy(head.write(qdsize), &in[qdstart], qdsize);
 
 	return true;
 }
