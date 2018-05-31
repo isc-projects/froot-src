@@ -29,12 +29,15 @@ const Answer* NameData::answer(Context::Type type, bool do_bit) const
 
 static void find_glue(RRList& rrl, const ldns_dnssec_rrsets* rrset, const ldns_dnssec_zone* zone)
 {
+	// temporary const_cast for older versions of ldns
+	auto _zone = const_cast<ldns_dnssec_zone*>(zone);
+
 	if (rrset) {
 		auto rrs = rrset->rrs;
 		while (rrs) {
 			auto name = ldns_rr_ns_nsdname(rrs->rr);
-			rrl.append(ldns_dnssec_zone_find_rrset(zone, name, LDNS_RR_TYPE_A));
-			rrl.append(ldns_dnssec_zone_find_rrset(zone, name, LDNS_RR_TYPE_AAAA));
+			rrl.append(ldns_dnssec_zone_find_rrset(_zone, name, LDNS_RR_TYPE_A));
+			rrl.append(ldns_dnssec_zone_find_rrset(_zone, name, LDNS_RR_TYPE_AAAA));
 			rrs = rrs->next;
 		}
 	}
@@ -74,12 +77,15 @@ void NameData::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dns
 {
 	RRList empty, soa, ns, ds, glue;
 
+	// temporary const_cast for older versions of ldns
+	auto _name = const_cast<ldns_dnssec_name*>(name);
+
 	soa.append(ldns_dnssec_name_find_rrset(zone->soa, LDNS_RR_TYPE_SOA));
-	ns.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_NS));
-	ds.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_DS));
+	ns.append(ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_NS));
+	ds.append(ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_DS));
 
 	// fill out glue
-	auto ns_rrl = ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_NS);
+	auto ns_rrl = ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_NS);
 	find_glue(glue, ns_rrl, zone);
 
 	// create unsigned answers
@@ -94,7 +100,7 @@ void NameData::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dns
 	soa.append(zone->soa->nsec_signatures);
 
 	// signed referral requires signed DS record
-	ns.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_DS));
+	ns.append(ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_DS));
 
 	// create signed answers
 	dnssec[Context::Type::ctx_tld_ds] = new Answer(ds, empty, empty, true, true);
