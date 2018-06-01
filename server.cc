@@ -31,12 +31,10 @@ void dump(const std::vector<iovec>& iov, size_t n)
 
 void Server::send(PacketSocket& s, msghdr& msg, std::vector<iovec>& iov) const
 {
-	dump(iov, iov.size());
-
 	auto& ip = *reinterpret_cast<struct ip*>(iov[0].iov_base);
 
 	// determine maximum payload fragment size
-	auto mtu = 576; // s.getmtu();
+	auto mtu = s.getmtu();
 	auto max_frag = mtu - sizeof ip;
 
 	// state variables
@@ -76,7 +74,6 @@ void Server::send(PacketSocket& s, msghdr& msg, std::vector<iovec>& iov) const
 
 			// send here
 			ip.ip_len = htons(chunk + sizeof ip);
-			fprintf(stderr, "length = %ld\n", chunk + sizeof ip);
 			ip.ip_off = htons(0x2000 | (offset >> 3));
 			ip.ip_sum = 0;
 			ip.ip_sum = checksum(&ip, sizeof ip);
