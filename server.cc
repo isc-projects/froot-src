@@ -19,22 +19,24 @@ void Server::load(const std::string& filename)
 	zone.load(filename);
 }
 
-void dump(const std::vector<iovec>& iov)
+void dump(const std::vector<iovec>& iov, size_t n)
 {
 	size_t total = 0;
-	for (auto& v: iov) {
-		fprintf(stderr, "%16p %4ld\n", v.iov_base, v.iov_len);
-		total += v.iov_len;
+	for (auto i = 0U; i < n; ++i) {
+		fprintf(stderr, "%16p %4ld\n", iov[i].iov_base, iov[i].iov_len);
+		total += iov[i].iov_len;
 	}
 	fprintf(stderr, "total len = %ld\n", total);
 }
 
 void Server::send(PacketSocket& s, msghdr& msg, std::vector<iovec>& iov) const
 {
+	dump(iov, iov.size());
+
 	auto& ip = *reinterpret_cast<struct ip*>(iov[0].iov_base);
 
 	// determine maximum payload fragment size
-	auto mtu = s.getmtu();
+	auto mtu = 576; // s.getmtu();
 	auto max_frag = mtu - sizeof ip;
 
 	// state variables
@@ -59,6 +61,7 @@ void Server::send(PacketSocket& s, msghdr& msg, std::vector<iovec>& iov) const
 			// frags need to be a multiple of 8 in length
 			auto round = chunk % 8;
 			chunk -= round;
+			excess += round;
 
 			// adjust this iovec's len to the new total length
 			vec.iov_len -= excess;
@@ -73,6 +76,7 @@ void Server::send(PacketSocket& s, msghdr& msg, std::vector<iovec>& iov) const
 
 			// send here
 			ip.ip_len = htons(chunk + sizeof ip);
+			fprintf(stderr, "length = %ld\n", chunk + sizeof ip);
 			ip.ip_off = htons(0x2000 | (offset >> 3));
 			ip.ip_sum = 0;
 			ip.ip_sum = checksum(&ip, sizeof ip);
@@ -91,17 +95,15 @@ void Server::send(PacketSocket& s, msghdr& msg, std::vector<iovec>& iov) const
 	}
 
 	msg.msg_iov = iov.data();
-	msg.msg_iovlen = iter - iov.begin();
+	msg.msg_iovlen = iov.size();
 
 	ip.ip_len = htons(chunk + sizeof ip);
-	ip.ip_off = htons(0x2000 | (offset >> 3));
+	ip.ip_off = htons(offset >> 3);
 	ip.ip_sum = 0;
 	ip.ip_sum = checksum(&ip, sizeof ip);
 	if (::sendmsg(s.fd, &msg, MSG_DONTWAIT) < 0) {
 		perror("sendmsg");
 	}
-
-	// send here
 }
 
 void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
@@ -206,7 +208,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 		msg.msg_flags = 0;
 
 		// and send it on
-		this->send(s, msg, iov);
+		send(s, msg, iov);
 	}
 }
 
