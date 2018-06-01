@@ -22,6 +22,7 @@ private:
 	uint8_t*	map = nullptr;
 	uint32_t	rx_current = 0;
 	ptrdiff_t	ll_offset;
+	size_t		mtu;
 
 public:
 	int		fd = -1;
@@ -37,8 +38,10 @@ public:
 	void		bind(const std::string& ifname);
 	int		poll(int timeout = -1);
 
-	int		setopt(int optname, const uint32_t val);
-	int		getopt(int optname, uint32_t& val);
+	int		setopt(int optname, const uint32_t val) const;
+	int		getopt(int optname, uint32_t& val) const;
+
+	size_t		getmtu() const;
 
 	void		rx_ring_enable(size_t frame_bits, size_t frame_nr);
 	int		rx_ring_next(rx_callback_t cb, int timeout = -1, void *userdata = nullptr);

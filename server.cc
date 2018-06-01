@@ -125,7 +125,10 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 		msg.msg_flags = 0;
 
 		// and send it on
-		::sendmsg(s.fd, &msg, MSG_DONTWAIT);
+		ssize_t n = ::sendmsg(s.fd, &msg, MSG_DONTWAIT);
+		if (n < 0) {
+			perror("sendmsg");
+		}
 	}
 }
 

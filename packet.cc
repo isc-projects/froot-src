@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include <unistd.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/mman.h>
 #include <netinet/ip.h>
@@ -47,15 +48,20 @@ void PacketSocket::close()
 	}
 }
 
-int PacketSocket::setopt(int name, const uint32_t val)
+int PacketSocket::setopt(int name, const uint32_t val) const
 {
 	return ::setsockopt(fd, SOL_PACKET, name, &val, sizeof val);
 }
 
-int PacketSocket::getopt(int name, uint32_t& val)
+int PacketSocket::getopt(int name, uint32_t& val) const
 {
 	socklen_t len = sizeof(val);
 	return ::getsockopt(fd, SOL_PACKET, name, &val, &len);
+}
+
+size_t PacketSocket::getmtu() const
+{
+	return mtu;
 }
 
 void PacketSocket::bind(unsigned int ifindex)
@@ -68,6 +74,17 @@ void PacketSocket::bind(unsigned int ifindex)
 	if (::bind(fd, reinterpret_cast<sockaddr *>(&saddr), sizeof(saddr)) < 0) {
 		throw_errno("bind AF_PACKET");
 	}
+
+	// get the interface's MTU
+	ifreq ifr;
+	ifr.ifr_ifindex = ifindex;
+	if (::ioctl(fd, SIOCGIFNAME, &ifr) < 0) {
+		throw_errno("ioctl(SIOCGIFNAME)");
+	}
+	if (::ioctl(fd, SIOCGIFMTU, &ifr) < 0) {
+		throw_errno("ioctl(SIOCGIFMTU)");
+	}
+	mtu = ifr.ifr_mtu;
 
 	// set the AF_PACKET socket's fanout mode
 	uint32_t fanout = (getpid() & 0xffff) | (PACKET_FANOUT_CPU << 16);
