@@ -181,20 +181,12 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 
 	if (ctx.execute(iov)) {
 
-		// calculate total length
-		size_t ip_len = 0;
-		for (auto v : iov) {
-			ip_len += v.iov_len;
+		// calculate UDP length
+		size_t udp_len = 0;
+		for (auto iter = iov.begin() + 1; iter != iov.end(); ++iter) {
+			udp_len += iter->iov_len;
 		}
-
-		// update IP length
-		if (version == 4) {
-			ip4_out.ip_len = htons(ip_len);
-			ip4_out.ip_sum = checksum(&ip4_out, sizeof ip4_out);
-		}
-
-		// update UDP length
-		udp_out.uh_ulen = htons(ip_len - iov[0].iov_len);
+		udp_out.uh_ulen = htons(udp_len);
 
 		// construct response message
 		msghdr msg;
