@@ -21,48 +21,50 @@ void Server::load(const std::string& filename)
 
 void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
 {
+	static ip ip4_out;
+	static udphdr udp_out;
+
 	// empty frame
-	if (buflen <= 0) return;
+	if (buflen == 0) return;
 
-	uint8_t headbuf[512];
-	ReadBuffer  in	 { buffer, buflen };
-	WriteBuffer head { headbuf, sizeof headbuf };
-	ReadBuffer  body { nullptr, 0 };
+	// buffer for extracting data
+	ReadBuffer in(buffer, buflen);
 
-	auto head_l3_header = head.base();
+	// iovecs for sending data
+	std::vector<iovec> iov;
+	iov.reserve(5);		// L3 + L4 + DNS (header + question) + BODY + EDNS
 
 	// extract L3 header
 	auto version = (in[0] >> 4) & 0x0f;
 
 	if (version == 4) {
 
+		iov.push_back( { &ip4_out, sizeof ip4_out } );
+
 		// check IP header length
 		auto ihl = 4U * (in[0] & 0x0f);
 		if (in.available() < ihl) return;
 
 		// consume IPv4 header, skipping IP options
-		auto& l3 = in.read<struct ip>();
-		if (ihl > sizeof l3) {
-			(void) in.read(ihl - sizeof l3);
+		auto& ip4_in = in.read<struct ip>();
+		if (ihl > sizeof ip4_in) {
+			(void) in.read(ihl - sizeof ip4_in);
 		}
 
 		// UDP only supported
-		if (l3.ip_p != IPPROTO_UDP) return;
+		if (ip4_in.ip_p != IPPROTO_UDP) return;
 
-		// populate reply header
-		auto& ip = head.write<struct ip>();
-
-		ip.ip_v = 4;
-		ip.ip_hl = (sizeof ip) / 4;
-		ip.ip_tos = 0;
-		ip.ip_len = 0;
-		ip.ip_id = l3.ip_id;
-		ip.ip_off = 0;
-		ip.ip_ttl = 31;
-		ip.ip_p = l3.ip_p;
-		ip.ip_sum = 0;
-		ip.ip_src = l3.ip_dst;
-		ip.ip_dst = l3.ip_src;
+		ip4_out.ip_v = 4;
+		ip4_out.ip_hl = (sizeof ip4_out) / 4;
+		ip4_out.ip_tos = 0;
+		ip4_out.ip_len = 0;
+		ip4_out.ip_id = ip4_in.ip_id;
+		ip4_out.ip_off = 0;
+		ip4_out.ip_ttl = 31;
+		ip4_out.ip_p = ip4_in.ip_p;
+		ip4_out.ip_sum = 0;
+		ip4_out.ip_src = ip4_in.ip_dst;
+		ip4_out.ip_dst = ip4_in.ip_src;
 
 	} else if (version == 6) {
 
@@ -73,25 +75,22 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 
 	// consume L4 UDP header
 	if (in.available() < sizeof(udphdr)) return;
-	auto& l4 = in.read<udphdr>();
+	auto& udp_in = in.read<udphdr>();
 
 	// require expected dest port
-	if (l4.uh_dport != htons(8053)) return;
+	if (udp_in.uh_dport != htons(8053)) return;
 
 	// ignore illegal source ports
-	if (l4.uh_sport == htons(0) || l4.uh_sport == htons(7) || l4.uh_sport == htons(123)) return;
-
-	// remember the start of the UDP header
-	auto udpoff = head.position();
+	auto sport = ntohs(udp_in.uh_sport);
+	if (sport == 0 || sport == 7 || sport == 123) return;
 
 	// populate response fields
-	auto& udp = head.write<udphdr>();
-	udp.uh_sport = l4.uh_dport;
-	udp.uh_dport = l4.uh_sport;
-	udp.uh_sum = 0;
-	udp.uh_ulen = 0;
+	udp_out.uh_sport = udp_in.uh_dport;
+	udp_out.uh_dport = udp_in.uh_sport;
+	udp_out.uh_sum = 0;
+	udp_out.uh_ulen = 0;
 
-	std::vector<iovec> iov = { { head.base(), head.position() } };
+	iov.push_back( { &udp_out, sizeof udp_out } );
 
 	// created on stack here to avoid use of the heap
 	Context ctx(zone, in);
@@ -106,13 +105,12 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 
 		// update IP length
 		if (version == 4) {
-			auto& ip = *reinterpret_cast<struct ip*>(head_l3_header);
-			ip.ip_len = htons(ip_len);
-			ip.ip_sum = checksum(&ip, sizeof ip);
+			ip4_out.ip_len = htons(ip_len);
+			ip4_out.ip_sum = checksum(&ip4_out, sizeof ip4_out);
 		}
 
 		// update UDP length
-		udp.uh_ulen = htons(ip_len - udpoff);
+		udp_out.uh_ulen = htons(ip_len - iov[0].iov_len);
 
 		// construct response message
 		msghdr msg;

@@ -255,7 +255,7 @@ bool Context::execute(std::vector<iovec>& out)
 	}
 
 	// craft response header
-	auto& tx_hdr = head.write<dnshdr>();
+	auto& tx_hdr = head.reserve<dnshdr>();
 	tx_hdr.id = rx_hdr.id;
 
 	uint16_t flags = ntohs(rx_hdr.flags);
@@ -274,7 +274,7 @@ bool Context::execute(std::vector<iovec>& out)
 	tx_hdr.arcount = htons(answer->arcount + has_edns);
 
 	// copy question section and save
-	::memcpy(head.write(qdsize), &in[qdstart], qdsize);
+	::memcpy(head.reserve(qdsize), &in[qdstart], qdsize);
 	out.push_back(head);
 
 	// save answer
@@ -284,7 +284,7 @@ bool Context::execute(std::vector<iovec>& out)
 
 	// add OPT RR if needed
 	if (has_edns) {
-		auto& opt = edns.write<edns_opt_rr>();
+		auto& opt = edns.reserve<edns_opt_rr>();
 		opt.name = 0;		// "."
 		opt.type = htons(LDNS_RR_TYPE_OPT);
 		opt.bufsize = htons(1480);

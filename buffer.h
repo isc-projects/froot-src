@@ -46,10 +46,10 @@ public:
 
 public:
 	void* base() const;
-	uint8_t* write(size_t n);
+	uint8_t* reserve(size_t n);
 
-	template<typename T> T& write();
-	template<typename T> T* write_array(size_t n);
+	template<typename T> T& reserve();
+	template<typename T> T* reserve_array(size_t n);
 
 	uint8_t& operator[](size_t x) const;
 	operator iovec() const;
@@ -121,20 +121,20 @@ inline uint8_t& WriteBuffer::operator[](size_t x) const {
 	return _base[x];
 }
 
-inline uint8_t* WriteBuffer::write(size_t n) {
+inline uint8_t* WriteBuffer::reserve(size_t n) {
 	auto p = _base + _position;
 	_position += n;
 	return p;
 }
 
 template<typename T>
-T& WriteBuffer::write() {
-	return *write_array<T>(1);
+T& WriteBuffer::reserve() {
+	return *reserve_array<T>(1);
 }
 
 template<typename T>
-T* WriteBuffer::write_array(size_t n) {
-	return reinterpret_cast<T*>(write(n * sizeof(T)));
+T* WriteBuffer::reserve_array(size_t n) {
+	return reinterpret_cast<T*>(reserve(n * sizeof(T)));
 }
 
 inline ReadBuffer::operator iovec() const
