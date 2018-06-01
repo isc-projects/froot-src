@@ -19,6 +19,91 @@ void Server::load(const std::string& filename)
 	zone.load(filename);
 }
 
+void dump(const std::vector<iovec>& iov)
+{
+	size_t total = 0;
+	for (auto& v: iov) {
+		fprintf(stderr, "%16p %4ld\n", v.iov_base, v.iov_len);
+		total += v.iov_len;
+	}
+	fprintf(stderr, "total len = %ld\n", total);
+}
+
+void Server::send(PacketSocket& s, msghdr& msg, std::vector<iovec>& iov) const
+{
+	auto& ip = *reinterpret_cast<struct ip*>(iov[0].iov_base);
+
+	// determine maximum payload fragment size
+	auto mtu = s.getmtu();
+	auto max_frag = mtu - sizeof ip;
+
+	// state variables
+	auto iter = iov.begin() + 1;
+	auto chunk = 0U;
+	auto offset = 0U;
+
+	while (iter != iov.end()) {
+
+		auto& vec = *iter++;
+		auto p = reinterpret_cast<uint8_t*>(vec.iov_base);
+		auto len = vec.iov_len;
+		chunk += len;
+
+		// did we take too much?
+		if (chunk > max_frag) {
+
+			// how much too much?
+			auto excess = chunk - max_frag;
+			chunk -= excess;
+
+			// frags need to be a multiple of 8 in length
+			auto round = chunk % 8;
+			chunk -= round;
+
+			// adjust this iovec's len to the new total length
+			vec.iov_len -= excess;
+
+			// and insert a new iovec after this one that holds the left-overs
+			// assignment necessary in case old iterator is invalidated
+			iter = iov.insert(iter, iovec { p + vec.iov_len, len - vec.iov_len});
+
+			// determine the number of iovecs to send
+			msg.msg_iov = iov.data();
+			msg.msg_iovlen = iter - iov.begin();
+
+			// send here
+			ip.ip_len = htons(chunk + sizeof ip);
+			ip.ip_off = htons(0x2000 | (offset >> 3));
+			ip.ip_sum = 0;
+			ip.ip_sum = checksum(&ip, sizeof ip);
+
+			if (::sendmsg(s.fd, &msg, MSG_DONTWAIT) < 0) {
+				perror("sendmsg");
+			}
+
+			// remove the already transmitted iovecs (excluding the IP header)
+			iter = iov.erase(iov.begin() + 1, iter);
+
+			// start collecting the next chunk
+			offset += chunk;
+			chunk = 0;
+		}
+	}
+
+	msg.msg_iov = iov.data();
+	msg.msg_iovlen = iter - iov.begin();
+
+	ip.ip_len = htons(chunk + sizeof ip);
+	ip.ip_off = htons(0x2000 | (offset >> 3));
+	ip.ip_sum = 0;
+	ip.ip_sum = checksum(&ip, sizeof ip);
+	if (::sendmsg(s.fd, &msg, MSG_DONTWAIT) < 0) {
+		perror("sendmsg");
+	}
+
+	// send here
+}
+
 void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
 {
 	static ip ip4_out;
@@ -32,7 +117,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 
 	// iovecs for sending data
 	std::vector<iovec> iov;
-	iov.reserve(5);		// L3 + L4 + DNS (header + question) + BODY + EDNS
+	iov.reserve(5);		// 5 = L3 + L4 + DNS (header + question) + BODY + EDNS
 
 	// extract L3 header
 	auto version = (in[0] >> 4) & 0x0f;
@@ -78,7 +163,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	auto& udp_in = in.read<udphdr>();
 
 	// require expected dest port
-	if (udp_in.uh_dport != htons(8053)) return;
+	if (udp_in.uh_dport != htons(53)) return;
 
 	// ignore illegal source ports
 	auto sport = ntohs(udp_in.uh_sport);
@@ -116,17 +201,12 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 		msghdr msg;
 		msg.msg_name = reinterpret_cast<void*>(const_cast<sockaddr_ll*>(addr));
 		msg.msg_namelen = sizeof(sockaddr_ll);
-		msg.msg_iov = iov.data();
-		msg.msg_iovlen = iov.size();
 		msg.msg_control = nullptr;
 		msg.msg_controllen = 0;
 		msg.msg_flags = 0;
 
 		// and send it on
-		ssize_t n = ::sendmsg(s.fd, &msg, MSG_DONTWAIT);
-		if (n < 0) {
-			perror("sendmsg");
-		}
+		this->send(s, msg, iov);
 	}
 }
 
