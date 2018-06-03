@@ -149,7 +149,9 @@ void Zone::add_name(const ldns_dnssec_name* name)
 	std::string key = strlower(p, len);
 	free(str);
 
-	data.emplace_hint(data.end(), std::move(key), new NameData(name, zone));
+	auto nd = new NameData(name, zone);
+	data.insert({key, nd});
+	aux.insert({key, nd});
 }
 
 void Zone::build_answers()
@@ -192,11 +194,16 @@ void Zone::load(const std::string& filename)
 
 const NameData& Zone::lookup(const std::string& qname, bool& matched) const
 {
-	auto iter = data.lower_bound(qname);
-	matched = (iter != data.end()) && (iter->first == qname);
-	if (!matched) {
-		--iter;
+	{
+		auto iter = aux.find(qname);
+		if (iter != aux.end()) {
+			matched = true;
+			return *(iter->second);
+		}
 	}
+
+	auto iter = data.lower_bound(qname);
+	--iter;
 	return *(iter->second);
 }
 

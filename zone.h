@@ -2,6 +2,7 @@
 
 #include <string>
 #include <map>
+#include <unordered_map>
 
 #include <ldns/dnssec.h>
 
@@ -32,10 +33,12 @@ class Zone {
 
 private:
 	typedef std::map<std::string, const NameData*> Data;
+	typedef std::unordered_map<std::string, const NameData*> Aux;
 
 private:
 	ldns_dnssec_zone*	zone = nullptr;
 	Data data;
+	Aux aux;
 
 private:
 	void add_name(const ldns_dnssec_name* name);
