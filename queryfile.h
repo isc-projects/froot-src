@@ -4,31 +4,6 @@
 #include <vector>
 #include <deque>
 
-#if 0
-
-class QueryRecord {
-
-public:
-	typedef std::vector<uint8_t>	Buffer;
-
-private:
-	Buffer				buffer;
-
-public:
-	QueryRecord(const std::string& name, const std::string& qtype);
-	QueryRecord(QueryRecord::Buffer&& buffer, size_t len);
-
-	size_t size() const {
-		return buffer.size();
-	}
-
-	const uint8_t* const data() const {
-		return buffer.data();
-	}
-};
-
-#endif
-
 class QueryFile {
 
 public:
