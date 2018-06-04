@@ -28,8 +28,6 @@ void usage(int result = EXIT_FAILURE)
 
 int app(int argc, char *argv[])
 {
-	Server server;
-
 	const char *zfname = "root.zone";
 	const char *ifname = nullptr;
 	uint16_t port = 53;
@@ -60,11 +58,11 @@ int app(int argc, char *argv[])
 	threads = std::min(threads, max_threads);
 	threads = std::max(1U, threads);
 
+	Server server;
 	server.load(zfname);
-	auto n = std::thread::hardware_concurrency();
 
-	std::vector<std::thread> workers;
-	std::vector<PacketSocket> socks(n);
+	std::vector<std::thread> workers(threads);
+	std::vector<PacketSocket> socks(threads);
 
 	for (auto i = 0U; i < threads; ++i) {
 
@@ -72,8 +70,8 @@ int app(int argc, char *argv[])
 		socks[i].bind(ifname);
 		socks[i].rx_ring_enable(11, 128);
 
-		workers.emplace_back(std::thread(
-			&Server::worker, &server, std::ref(socks[i]), port));
+		workers[i] = std::thread(
+			&Server::worker, &server, std::ref(socks[i]), port);
 		thread_setcpu(workers[i], i);
 	}
 
