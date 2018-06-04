@@ -14,10 +14,9 @@ private:
 private:
 	void send(PacketSocket&s, msghdr& msg, std::vector<iovec>& iov) const;
 	void handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata);
-	void loop(PacketSocket& s);
 
 public:
-	void worker(const std::string& ifname);
+	void worker(PacketSocket& s);
 	void load(const std::string& filename);
 
 public:

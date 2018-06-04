@@ -162,7 +162,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	auto& udp_in = in.read<udphdr>();
 
 	// require expected dest port
-	if (udp_in.uh_dport != htons(53)) return;
+	if (udp_in.uh_dport != htons(8053)) return;
 
 	// ignore illegal source ports
 	auto sport = ntohs(udp_in.uh_sport);
@@ -201,23 +201,15 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	}
 }
 
-void Server::loop(PacketSocket& s)
+void Server::worker(PacketSocket& s)
 {
 	using namespace std::placeholders;
 	PacketSocket::rx_callback_t callback = std::bind(&Server::handle_packet, this, _1, _2, _3, _4, _5);
-	while (true) {
-		s.rx_ring_next(callback, -1, nullptr);
-	}
-}
 
-void Server::worker(const std::string& ifname)
-{
 	try {
-		PacketSocket socket;
-		socket.open();
-		socket.bind(ifname);
-		socket.rx_ring_enable(11, 128);	// frame size = 2048
-		loop(socket);
+		while (true) {
+			s.rx_ring_next(callback, -1, nullptr);
+		}
 	} catch (std::exception& e) {
 		std::cerr << "worker error: " << e.what() << std::endl;
 	}
