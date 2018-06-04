@@ -162,7 +162,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	auto& udp_in = in.read<udphdr>();
 
 	// require expected dest port
-	if (udp_in.uh_dport != htons(8053)) return;
+	if (udp_in.uh_dport != port) return;
 
 	// ignore illegal source ports
 	auto sport = ntohs(udp_in.uh_sport);
@@ -201,10 +201,14 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	}
 }
 
-void Server::worker(PacketSocket& s)
+void Server::worker(PacketSocket& s, uint16_t _port)
 {
+	// set listening port
+	port = ntohs(_port);
+
 	using namespace std::placeholders;
-	PacketSocket::rx_callback_t callback = std::bind(&Server::handle_packet, this, _1, _2, _3, _4, _5);
+	PacketSocket::rx_callback_t callback =
+		std::bind(&Server::handle_packet, this, _1, _2, _3, _4, _5);
 
 	try {
 		while (true) {
@@ -215,7 +219,7 @@ void Server::worker(PacketSocket& s)
 	}
 }
 
-Server::Server()
+Server::Server() : port(htons(8053))
 {
 }
 

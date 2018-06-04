@@ -140,6 +140,10 @@ void PacketSocket::rx_ring_enable(size_t frame_bits, size_t frame_nr)
 
 int PacketSocket::rx_ring_next(PacketSocket::rx_callback_t callback, int timeout, void *userdata)
 {
+	if (!map) {
+		throw std::runtime_error("AF_PACKET rx_ring not enabled");
+	}
+
 	auto frame = map + rx_current * req.tp_frame_size;
 	auto& hdr = *reinterpret_cast<tpacket_hdr*>(frame);
 

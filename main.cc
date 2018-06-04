@@ -13,29 +13,72 @@ void thread_setcpu(std::thread& t, unsigned int n)
         pthread_setaffinity_np(t.native_handle(), sizeof(cpu), &cpu);
 }
 
+void usage(int result = EXIT_FAILURE)
+{
+	using namespace std;
+
+	cout << "lightning -i <ifname> [-z <zonefile>] [-T <threads>]" << endl;
+	cout << "  -i the network interface to listen on" << endl;
+	cout << "  -p the UDP port to listen on (default: 53)" << endl;
+	cout << "  -z the zone file to load (default: root.zone)" << endl;
+	cout << "  -T the number of threads to run (default: ncpus)" << endl;
+
+	exit(result);
+}
+
 int app(int argc, char *argv[])
 {
 	Server server;
-	server.load("root.zone");
-	std::string ifname("enp5s0f1");
 
+	const char *zfname = "root.zone";
+	const char *ifname = nullptr;
+	uint16_t port = 53;
+	auto max_threads = std::thread::hardware_concurrency();
+	auto threads = max_threads;
+
+	--argc;
+	++argv;
+	while (argc > 0 && **argv == '-') {
+		char o = *++*argv;
+		switch (o) {
+			case 'i': argc--; argv++; ifname = *argv; break;
+			case 'f': argc--; argv++; zfname = *argv; break;
+			case 'p': argc--; argv++; port = atoi(*argv); break;
+			case 'T': argc--; argv++; threads = atoi(*argv); break;
+			case 'h': usage(EXIT_SUCCESS);
+			default: usage();
+		}
+		--argc;
+		++argv;
+	}
+
+	if (argc || !ifname) {
+		usage();
+	}
+
+	// limit thread range
+	threads = std::min(threads, max_threads);
+	threads = std::max(1U, threads);
+
+	server.load(zfname);
 	auto n = std::thread::hardware_concurrency();
 
-	std::vector<std::thread> threads;
+	std::vector<std::thread> workers;
 	std::vector<PacketSocket> socks(n);
 
-	for (auto i = 0U; i < n; ++i) {
+	for (auto i = 0U; i < threads; ++i) {
 
 		socks[i].open();
 		socks[i].bind(ifname);
 		socks[i].rx_ring_enable(11, 128);
 
-		threads.emplace_back(std::thread(&Server::worker, &server, std::ref(socks[i])));
-		thread_setcpu(threads[i], i);
+		workers.emplace_back(std::thread(
+			&Server::worker, &server, std::ref(socks[i]), port));
+		thread_setcpu(workers[i], i);
 	}
 
-	for (auto i = 0U; i < n; ++i) {
-		threads[i].join();
+	for (auto i = 0U; i < threads; ++i) {
+		workers[i].join();
 	}
 
 	return 0;
