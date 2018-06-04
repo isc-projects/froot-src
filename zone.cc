@@ -202,6 +202,7 @@ const NameData& Zone::lookup(const std::string& qname, bool& matched) const
 		}
 	}
 
+	matched = false;
 	auto iter = data.lower_bound(qname);
 	--iter;
 	return *(iter->second);
