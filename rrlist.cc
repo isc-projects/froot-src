@@ -6,7 +6,7 @@
 void RRList::append(const ldns_rr* rr)
 {
 	if (rr) {
-		auto p = std::shared_ptr<ldns_rr>(ldns_rr_clone(rr), [](ldns_rr* p) { ldns_rr_free(p); });
+		auto p = std::shared_ptr<ldns_rr>(ldns_rr_clone(rr), ldns_rr_free);
 		list.push_back(p);
 	}
 }
