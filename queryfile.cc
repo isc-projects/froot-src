@@ -130,7 +130,7 @@ void QueryFile::read_raw(const std::string& filename)
 	std::swap(queries, list);
 }
 
-void QueryFile::write_raw(const std::string& filename)
+void QueryFile::write_raw(const std::string& filename) const
 {
 	std::ofstream file(filename, std::ifstream::binary);
 	if (!file) {

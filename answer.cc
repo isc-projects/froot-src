@@ -38,7 +38,7 @@
  *
  */
 
-Answer* Answer::empty = new Answer(RRList(), RRList(), RRList(), false);
+const Answer* Answer::empty = new Answer(RRList(), RRList(), RRList(), false);
 
 Answer::operator iovec() const
 {

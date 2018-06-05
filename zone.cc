@@ -140,7 +140,7 @@ NameData::~NameData()
 	delete[] plain;
 }
 
-void Zone::add_name(const ldns_dnssec_name* name)
+void Zone::build_name(const ldns_dnssec_name* name)
 {
 	auto owner = name->name;
 	auto str = ldns_rdf2str(owner);
@@ -154,15 +154,16 @@ void Zone::add_name(const ldns_dnssec_name* name)
 	aux.insert({key, nd});
 }
 
-void Zone::build_answers()
+void Zone::build_zone()
 {
 	auto node = ldns_rbtree_first(zone->names);
 	while (node != LDNS_RBTREE_NULL) {
-		auto name = reinterpret_cast<const ldns_dnssec_name *>(node->data);
+		// can be const in later versions of ldns
+		auto tmp = reinterpret_cast<const ldns_dnssec_name *>(node->data);
+		auto name = const_cast<ldns_dnssec_name *>(tmp);
 
-		// temporary const_cast for older versions of ldns
-		if (!ldns_dnssec_name_is_glue(const_cast<ldns_dnssec_name*>(name))) {
-			add_name(name);
+		if (!ldns_dnssec_name_is_glue(name)) {
+			build_name(name);
 		}
 		node = ldns_rbtree_next(node);
 	}
@@ -189,7 +190,7 @@ void Zone::load(const std::string& filename)
 	}
 
 	ldns_dnssec_zone_mark_glue(zone);
-	build_answers();
+	build_zone();
 }
 
 const NameData& Zone::lookup(const std::string& qname, bool& matched) const

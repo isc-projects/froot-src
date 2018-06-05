@@ -12,8 +12,6 @@
 class NameData {
 
 private:
-	static Answer*		empty;
-
 	Answer**		plain;
 	Answer**		dnssec;
 
@@ -41,8 +39,8 @@ private:
 	Aux aux;
 
 private:
-	void add_name(const ldns_dnssec_name* name);
-	void build_answers();
+	void build_name(const ldns_dnssec_name* name);
+	void build_zone();
 
 public:
 	void load(const std::string& filename);

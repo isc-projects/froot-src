@@ -16,7 +16,7 @@ private:
 public:
 	void				read_txt(const std::string& filename);
 	void				read_raw(const std::string& filename);
-	void				write_raw(const std::string& filename);
+	void				write_raw(const std::string& filename) const;
 
 public:
 
