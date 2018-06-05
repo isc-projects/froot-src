@@ -3,15 +3,16 @@ ifeq ($(UNAME), Darwin)
   LDNSPKG := libldns
 else
   LDNSPKG := ldns
+  BIN := lightning
 endif
 
 INCS = $(shell pkg-config $(LDNSPKG) --cflags)
 LIBS = $(shell pkg-config $(LDNSPKG) --libs)
 
-CXXFLAGS = -g -O3 -std=c++11 -Wall -Werror -Wno-error=pragmas $(INCS) -D_POSIX_SOURCE
+CXXFLAGS = -g -O3 -std=c++11 -Wall -Werror -Wno-error=pragmas $(INCS)
 LDFLAGS =
 
-BIN = lightning benchmark
+BIN += benchmark
 COMMON_OBJS = context.o zone.o answer.o rrlist.o util.o
 LIBS += -lpthread -lresolv
 

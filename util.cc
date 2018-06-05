@@ -9,14 +9,13 @@
 // potentially branchless conversion to lower-case
 uint8_t lower(uint8_t c)
 {
-	return c | ((c >= 'A' && c <= 'Z') * 0x20);
+	return (c >= 'A' && c <= 'Z') ? (c | 0x20) : c;
 }
 
 std::string strlower(const uint8_t* p, size_t n)
 {
-	std::string result;
-	result.resize(n);
-	std::transform(p, p + n, result.begin(), lower);
+	std::string result(reinterpret_cast<const char *>(p), n);
+	std::transform(result.cbegin(), result.cend(), result.begin(), lower);
 	return result;
 }
 

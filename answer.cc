@@ -45,11 +45,6 @@ Answer::operator iovec() const
 	return iovec { buf, size };
 }
 
-bool Answer::authoritative() const
-{
-	return aa_bit;
-}
-
 Answer::Answer(const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit, bool sigs) : aa_bit(aa_bit)
 {
 	size_t n = 4096;

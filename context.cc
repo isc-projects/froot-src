@@ -109,7 +109,8 @@ static bool parse_name(ReadBuffer& in, std::string& name, uint8_t& labels)
 	auto name_length = in.position() - last - 1;
 
 	// make lower cased qname
-	name.assign(strlower(&in[last], name_length));
+	auto tmp = strlower(&in[last], name_length);
+	std::swap(name, tmp);
 
 	return true;
 }

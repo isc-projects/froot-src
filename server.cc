@@ -183,7 +183,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 
 		// calculate UDP length
 		size_t udp_len = 0;
-		for (auto iter = iov.begin() + 1; iter != iov.end(); ++iter) {
+		for (auto iter = iov.cbegin() + 1; iter != iov.cend(); ++iter) {
 			udp_len += iter->iov_len;
 		}
 		udp_out.uh_ulen = htons(udp_len);

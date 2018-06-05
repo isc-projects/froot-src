@@ -28,3 +28,8 @@ public:
 	static const Answer*	empty;
 
 };
+
+inline bool Answer::authoritative() const
+{
+	return aa_bit;
+}
