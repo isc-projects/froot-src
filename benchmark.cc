@@ -15,7 +15,7 @@ void worker(const Zone& zone, const QueryFile& queries)
 		iov.reserve(5);
 
 		BenchmarkTimer t("100M queries");
-		for (size_t n = 0; n < 10; ++n) {
+		for (size_t n = 0; n < 0; ++n) {
 			for (size_t i = 0; i < 1e7; ++i) {
 
 				auto& q = queries[i];

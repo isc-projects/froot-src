@@ -1,3 +1,4 @@
+#include <arpa/inet.h>
 #include <ldns/ldns.h>
 
 #include "answer.h"
@@ -40,9 +41,99 @@
 
 const Answer* Answer::empty = new Answer(RRList(), RRList(), RRList(), false);
 
-Answer::operator iovec() const
+void Answer::dname_to_wire(ldns_buffer* lbuf, const ldns_rdf* name)
 {
-	return iovec { buf, size };
+	if (ldns_dname_label_count(name) == 0) {
+		ldns_buffer_write_u8(lbuf, 0);
+		return;
+	}
+
+	auto iter = c_table.find(name);
+	if (iter != c_table.end()) {
+		auto pos = iter->second;
+		c_offsets.push_back(ldns_buffer_position(lbuf));
+		ldns_buffer_write_u16(lbuf, pos);
+		return;
+	}
+
+	uint16_t pos = ldns_buffer_position(lbuf);
+	if (pos < 16384) {
+		auto clone = ldns_rdf_clone(name);
+		c_table[clone] = pos;
+	}
+
+	auto label = ldns_dname_label(name, 0);
+	auto rest = ldns_dname_left_chop(name);
+	auto size = ldns_rdf_size(label) - 1;
+	auto data = ldns_rdf_data(label);
+
+	ldns_buffer_write(lbuf, data, size);
+	ldns_rdf_deep_free(label);
+
+	dname_to_wire(lbuf, rest);	// recursive
+
+	ldns_rdf_deep_free(rest);
+}
+
+void Answer::rr_to_wire(ldns_buffer* lbuf, const ldns_rr* rr, int section)
+{
+	dname_to_wire(lbuf, ldns_rr_owner(rr));
+	ldns_buffer_write_u16(lbuf, ldns_rr_get_type(rr));
+	ldns_buffer_write_u16(lbuf, ldns_rr_get_class(rr));
+
+	if (section != LDNS_SECTION_QUESTION) {
+		ldns_buffer_write_u32(lbuf, ldns_rr_ttl(rr));
+		uint16_t rdlen_pos = ldns_buffer_position(lbuf);
+		ldns_buffer_write_u16(lbuf, 0);
+
+		// simple check for DNAME possible here because we know that the
+		// only records with DNAME rdata that appear in the root zone are
+		// compressible NS records
+
+		for (auto i = 0U; i < ldns_rr_rd_count(rr); ++i) {
+			auto rdf = ldns_rr_rdf(rr, i);
+			if (ldns_rdf_get_type(rdf) == LDNS_RDF_TYPE_DNAME) {
+				dname_to_wire(lbuf, rdf);
+			} else {
+				ldns_rdf2buffer_wire(lbuf, rdf);
+			}
+		}
+
+		ldns_buffer_write_u16_at(lbuf, rdlen_pos, ldns_buffer_position(lbuf) - rdlen_pos - 2);
+	}
+}
+
+size_t Answer::rrlist_to_wire(ldns_buffer* lbuf, const RRList& rrs, int section, bool sigs)
+{
+	size_t n = 0;
+
+	for (auto rrp: rrs.list()) {
+		auto rr = rrp.get();
+		if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_RRSIG) {
+			if (sigs) {
+				rr_to_wire(lbuf, rrp.get(), section);
+				++n;
+			}
+		} else {
+			rr_to_wire(lbuf, rrp.get(), section);
+			++n;
+		}
+	}
+
+	return n;
+}
+
+iovec Answer::data_offset_by(const uint16_t offset) const
+{
+	uint8_t* res = new uint8_t[size];
+	::memcpy(res, buf, size);
+
+	for (auto n: c_offsets) {
+		auto& p = *reinterpret_cast<uint16_t*>(res + n);
+		p = htons((ntohs(p) + offset) | 0xc000);
+	}
+
+	return iovec { res, size };
 }
 
 Answer::Answer(const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit, bool sigs) : aa_bit(aa_bit)
@@ -50,9 +141,9 @@ Answer::Answer(const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit
 	size_t n = 4096;
 	auto lbuf = ldns_buffer_new(n);
 
-	ancount = an.to_buffer_wire(lbuf, LDNS_SECTION_ANSWER, sigs);
-	nscount = ns.to_buffer_wire(lbuf, LDNS_SECTION_AUTHORITY, sigs);
-	arcount = ar.to_buffer_wire(lbuf, LDNS_SECTION_ADDITIONAL, sigs);
+	ancount = rrlist_to_wire(lbuf, an, LDNS_SECTION_ANSWER, sigs);
+	nscount = rrlist_to_wire(lbuf, ns, LDNS_SECTION_AUTHORITY, sigs);
+	arcount = rrlist_to_wire(lbuf, ar, LDNS_SECTION_ADDITIONAL, sigs);
 
 	size = ldns_buffer_position(lbuf);
 	buf = ldns_buffer_export(lbuf);
@@ -61,8 +152,15 @@ Answer::Answer(const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit
 
 Answer::~Answer()
 {
+	// clean up compression table pointers
+	for (auto iter: c_table) {
+		ldns_rdf_deep_free(const_cast<ldns_rdf*>(iter.first));
+	}
+
 	free(buf);
 }
+
+// --------------------------------------------------------------------
 
 const Answer* AnswerSet::answer(Answer::Type type, bool do_bit) const
 {
@@ -99,17 +197,17 @@ static RRList find_glue(const ldns_dnssec_rrsets* rrset, const ldns_dnssec_zone*
 
 void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone)
 {
-	RRList empty, soa, ns, dnskey, nsec;
-
 	auto name = zone->soa;
-	soa.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_SOA));
-	ns.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_NS));
-	dnskey.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_DNSKEY));
 
+	RRList empty;
+	RRList soa(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_SOA));
+	RRList ns(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_NS));
+	RRList dnskey(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_DNSKEY));
+
+	RRList nsec;
 	nsec.append(name->nsec);
 	nsec.append(name->nsec_signatures);
 
-	// fill out glue
 	auto ns_rrl = ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_NS);
 	RRList glue = find_glue(ns_rrl, zone);
 
@@ -131,14 +229,13 @@ void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone)
 
 void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone)
 {
-	RRList empty, soa, ns, ds;
-
 	// temporary const_cast for older versions of ldns
 	auto _name = const_cast<ldns_dnssec_name*>(name);
 
-	soa.append(ldns_dnssec_name_find_rrset(zone->soa, LDNS_RR_TYPE_SOA));
-	ns.append(ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_NS));
-	ds.append(ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_DS));
+	RRList empty;
+	RRList soa(ldns_dnssec_name_find_rrset(zone->soa, LDNS_RR_TYPE_SOA));
+	RRList ns(ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_NS));
+	RRList ds(ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_DS));
 
 	// fill out glue
 	auto ns_rrl = ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_NS);
