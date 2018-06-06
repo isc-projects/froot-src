@@ -19,8 +19,8 @@ private:
 
 private:
 	uint8_t			_head_buf[512];
+	uint8_t			_an_buf[4096];
 	uint8_t			_edns_buf[11];
-	uint8_t*		_an_buf = nullptr;
 
 	WriteBuffer		head { _head_buf, sizeof(_head_buf) } ;
 	WriteBuffer		edns { _edns_buf, sizeof(_edns_buf) } ;

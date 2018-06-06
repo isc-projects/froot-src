@@ -123,17 +123,16 @@ size_t Answer::rrlist_to_wire(ldns_buffer* lbuf, const RRList& rrs, int section,
 	return n;
 }
 
-iovec Answer::data_offset_by(const uint16_t offset) const
+iovec Answer::data_offset_by(const uint16_t offset, uint8_t *out) const
 {
-	uint8_t* res = new uint8_t[size];
-	::memcpy(res, buf, size);
+	::memcpy(out, buf, size);
 
 	for (auto n: c_offsets) {
-		auto& p = *reinterpret_cast<uint16_t*>(res + n);
+		auto& p = *reinterpret_cast<uint16_t*>(out + n);
 		p = htons((ntohs(p) + offset) | 0xc000);
 	}
 
-	return iovec { res, size };
+	return iovec { out, size };
 }
 
 Answer::Answer(const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit, bool sigs) : aa_bit(aa_bit)

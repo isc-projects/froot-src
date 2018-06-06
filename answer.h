@@ -56,7 +56,7 @@ public:
 
 				operator iovec() const { return iovec { buf, size }; };
 	bool			authoritative() const { return aa_bit; };
-	iovec			data_offset_by(uint16_t offset) const;
+	iovec			data_offset_by(uint16_t offset, uint8_t* out) const;
 
 public:
 	static const Answer*	empty;

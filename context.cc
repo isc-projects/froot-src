@@ -286,9 +286,7 @@ bool Context::execute(std::vector<iovec>& out)
 		if (answer == Answer::empty) {
 			out.push_back(*answer);
 		} else {
-			auto v = answer->data_offset_by(qdsize + 12);
-			_an_buf = reinterpret_cast<uint8_t*>(v.iov_base);
-			out.push_back(v);
+			out.push_back(answer->data_offset_by(qdsize + 12, _an_buf));
 		}
 	}
 
@@ -344,7 +342,4 @@ Context::Context(const Zone& zone, ReadBuffer& in) :
 
 Context::~Context()
 {
-	if (_an_buf) {
-		delete[] _an_buf;
-	}
 }
