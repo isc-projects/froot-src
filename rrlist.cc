@@ -1,7 +1,6 @@
 #include <map>
 
 #include <ldns/ldns.h>
-#include <ldns/host2wire.h>
 
 #include "rrlist.h"
 

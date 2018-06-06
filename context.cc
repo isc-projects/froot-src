@@ -1,6 +1,7 @@
 #include <cstring>
 #include <arpa/inet.h>
-#include <ldns/packet.h>
+
+#include <ldns/ldns.h>
 
 #include "context.h"
 #include "zone.h"
@@ -191,7 +192,7 @@ void Context::parse_question()
 	qdsize = in.position() - qdstart;
 
 	// reject meta queries
-	if (qtype == LDNS_RR_TYPE_OPT || (qtype >= 128 && qtype <= 255)) {
+	if (qtype >= 128 && qtype < LDNS_RR_TYPE_ANY) {
 		rcode = LDNS_RCODE_NOTIMPL;
 		return;
 	}
@@ -224,15 +225,17 @@ void Context::parse_packet()
 	}
 }
 
-void Context::perform_lookup()
+const Answer* Context::perform_lookup()
 {
-	auto& data = zone.lookup(qname, match);
+	auto* set = zone.lookup(qname, match);
 	rcode = match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
-	answer = data.answer(type(), do_bit);
+	return set->answer(type(), do_bit);
 }
 
 bool Context::execute(std::vector<iovec>& out)
 {
+	auto answer = Answer::empty;
+
 	// drop invalid packets
 	if (!legal_header(in)) {
 		return false;
@@ -250,7 +253,7 @@ bool Context::execute(std::vector<iovec>& out)
 		} else {
 			parse_packet();
 			if (rcode == LDNS_RCODE_NOERROR) {
-				perform_lookup();
+				answer = perform_lookup();
 			}
 		}
 	}
@@ -299,60 +302,33 @@ bool Context::execute(std::vector<iovec>& out)
 	return true;
 }
 
-/*
- * answer types:
- *
- *   . SOA      [ SOA, NS, glue ] + AA
- *   . NS       [ NS, empty, glue ] + AA
- *   . DNSKEY   [ DNSKEY, empty, empty ] + AA
- *   . NSEC     [ NSEC, NS, glue ] + AA
- *   . xxx      [ empty, SOA, empty ] + AA
- *
- *   foo DS     [ DS, empty, empty ] + AA
- *   foo xxx    [ empty, NS, glue ] -> "referral"
- *   *.foo xxx  referral
- *
- *   nxd        [ empty, SOA, empty ] + AA
- *
- *   with DNSSEC:
- *
- *   . SOA      [ SOA*, NS*, glue ] + AA
- *   . NS       [ NS*, empty, glue ] + AA
- *   . DNSKEY   [ DNSKEY*, empty, empty ] + AA
- *   . NSEC     [ NSEC*, NS*, glue ] + AA
- *   . xxx      [ empty, SOA* + NSEC*, empty ] + AA
- *
- *   foo DS     [ DS*, empty, empty ] + AA
- *   foo xxx    [ empty, NS + DS*, glue ] -> "signed referral"
- *   *.foo xxx  signed referral
- *
- *   nxd        [ empty, SOA* + NSEC*, empty ] + AA
- *
- */
-
-Context::Type Context::type() const
+Answer::Type Context::type() const
 {
 	if (!match) {
-		return ctx_nxdomain;
+		return Answer::Type::nxdomain;
 	} else if (qlabels > 1) {
-		return ctx_tld_referral;
+		return Answer::Type::tld_referral;
 	} else if (qlabels == 1) {
 		if (qtype == LDNS_RR_TYPE_DS) {
-			return ctx_tld_ds;
+			return Answer::Type::tld_ds;
+		} else if (qtype == LDNS_RR_TYPE_ANY) {
+			return Answer::Type::tld_any;
 		} else {
-			return ctx_tld_referral;
+			return Answer::Type::tld_referral;
 		}
 	} else  {
 		if (qtype == LDNS_RR_TYPE_SOA) {
-			return ctx_root_soa;
+			return Answer::Type::root_soa;
 		} else if (qtype == LDNS_RR_TYPE_NS) {
-			return ctx_root_ns;
+			return Answer::Type::root_ns;
 		} else if (qtype == LDNS_RR_TYPE_NSEC) {
-			return ctx_root_nsec;
+			return Answer::Type::root_nsec;
 		} else if (qtype == LDNS_RR_TYPE_DNSKEY) {
-			return ctx_root_dnskey;
+			return Answer::Type::root_dnskey;
+		} else if (qtype == LDNS_RR_TYPE_ANY) {
+			return Answer::Type::root_any;
 		} else {
-			return ctx_root_nodata;
+			return Answer::Type::root_nodata;
 		}
 	}
 }
@@ -360,7 +336,6 @@ Context::Type Context::type() const
 Context::Context(const Zone& zone, ReadBuffer& in) :
 	zone(zone), in(in)
 {
-	answer = Answer::empty;
 }
 
 Context::~Context()

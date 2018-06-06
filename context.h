@@ -11,24 +11,11 @@ class Zone;
 
 class Context {
 
-public:
-	enum Type {
-		ctx_root_soa = 0,
-		ctx_root_ns,
-		ctx_root_dnskey,
-		ctx_root_nsec,
-		ctx_root_nodata,
-		ctx_tld_ds,
-		ctx_tld_referral,
-		ctx_nxdomain,
-		ctx_size
-	};
-
 private:
 	void parse_edns();
 	void parse_question();
 	void parse_packet();
-	void perform_lookup();
+	const Answer* perform_lookup();
 
 private:
 	uint8_t			_head_buf[512];
@@ -40,7 +27,6 @@ private:
 private:
 	const Zone&		zone;
 	ReadBuffer&		in;
-	const Answer*		answer;
 
 private:
 	std::string		qname;
@@ -63,5 +49,5 @@ public:
 	~Context();
 
 	bool execute(std::vector<iovec>& iov);
-	Type type() const;
+	Answer::Type type() const;
 };

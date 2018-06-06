@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ldns/dnssec.h>
+#include <ldns/ldns.h>
 #include <memory>
 #include <vector>
 
