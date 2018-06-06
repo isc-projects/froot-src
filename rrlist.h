@@ -14,6 +14,8 @@ public:
 	void append(const ldns_dnssec_rrs* rrs);
 	void append(const ldns_dnssec_rrsets* rrset);
 
+	RRList operator+(const RRList& rhs) const;
+
 	size_t to_buffer_wire(ldns_buffer* buf, int section, bool sigs = false) const;
 	size_t count() const;
 
@@ -21,4 +23,5 @@ public:
 	RRList();
 	~RRList();
 
+	RRList(RRList&& rhs);
 };

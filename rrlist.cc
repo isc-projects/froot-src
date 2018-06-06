@@ -34,6 +34,21 @@ struct DNameCompare {
 	}
 };
 
+RRList RRList::operator+(const RRList& rhs) const
+{
+	RRList result;
+
+	for (auto rr: list) {
+		result.list.push_back(rr);
+	}
+
+	for (auto rr: rhs.list) {
+		result.list.push_back(rr);
+	}
+
+	return result;
+}
+
 typedef std::map<const ldns_rdf*, uint16_t, DNameCompare> CompressTable;
 typedef std::vector<uint16_t> CompressOffsets;
 
@@ -99,4 +114,9 @@ RRList::RRList()
 
 RRList::~RRList()
 {
+}
+
+RRList::RRList(RRList&& rhs)
+{
+	std::swap(list, rhs.list);
 }

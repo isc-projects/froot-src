@@ -15,6 +15,7 @@
  *
  *   foo DS	[ DS, empty, empty ] + AA
  *   foo xxx	[ empty, NS, glue ] -> "referral"
+ *   foo ANY	referral
  *   *.foo xxx	referral
  *
  *   nxd	[ empty, SOA, empty ] + AA
@@ -29,8 +30,8 @@
  *   . xxx	[ empty, SOA* + NSEC*, empty ] + AA
  *
  *   foo DS	[ DS*, empty, empty ] + AA
- *   foo ANY	[ empty, NS + DS*, glue ]
  *   foo xxx	[ empty, NS + DS*, glue ] -> "signed referral"
+ *   foo ANY	signed referral
  *   *.foo xxx	signed referral
  *
  *   nxd	[ empty, SOA* + NSEC*, empty ] + AA
@@ -76,8 +77,10 @@ const Answer* AnswerSet::answer(Answer::Type type, bool do_bit) const
 	return a ? a : Answer::empty;
 }
 
-static void find_glue(RRList& rrl, const ldns_dnssec_rrsets* rrset, const ldns_dnssec_zone* zone)
+static RRList find_glue(const ldns_dnssec_rrsets* rrset, const ldns_dnssec_zone* zone)
 {
+	RRList result;
+
 	// temporary const_cast for older versions of ldns
 	auto _zone = const_cast<ldns_dnssec_zone*>(zone);
 
@@ -85,26 +88,30 @@ static void find_glue(RRList& rrl, const ldns_dnssec_rrsets* rrset, const ldns_d
 		auto rrs = rrset->rrs;
 		while (rrs) {
 			auto name = ldns_rr_ns_nsdname(rrs->rr);
-			rrl.append(ldns_dnssec_zone_find_rrset(_zone, name, LDNS_RR_TYPE_A));
-			rrl.append(ldns_dnssec_zone_find_rrset(_zone, name, LDNS_RR_TYPE_AAAA));
+			result.append(ldns_dnssec_zone_find_rrset(_zone, name, LDNS_RR_TYPE_A));
+			result.append(ldns_dnssec_zone_find_rrset(_zone, name, LDNS_RR_TYPE_AAAA));
 			rrs = rrs->next;
 		}
 	}
+
+	return result;
 }
 
 void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone)
 {
-	RRList empty, soa, ns, dnskey, nsec, glue;
+	RRList empty, soa, ns, dnskey, nsec;
 
 	auto name = zone->soa;
 	soa.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_SOA));
 	ns.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_NS));
 	dnskey.append(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_DNSKEY));
+
 	nsec.append(name->nsec);
+	nsec.append(name->nsec_signatures);
 
 	// fill out glue
 	auto ns_rrl = ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_NS);
-	find_glue(glue, ns_rrl, zone);
+	RRList glue = find_glue(ns_rrl, zone);
 
 	plain[Answer::Type::root_soa] = new Answer(soa, ns, glue, true);
 	plain[Answer::Type::root_ns] = new Answer(ns, empty, glue, true);
@@ -112,19 +119,19 @@ void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone)
 	plain[Answer::Type::root_nsec] = new Answer(nsec, ns, glue, true);
 	plain[Answer::Type::root_nodata] = new Answer(empty, soa, empty, true);
 
-	// add RRSIGS for the NSEC records
-	nsec.append(name->nsec_signatures);
-
 	dnssec[Answer::Type::root_soa] = new Answer(soa, ns, glue, true, true);
 	dnssec[Answer::Type::root_ns] = new Answer(ns, empty, glue, true, true);
 	dnssec[Answer::Type::root_dnskey] = new Answer(dnskey, empty, empty, true, true);
 	dnssec[Answer::Type::root_nsec] = new Answer(nsec, ns, glue, true, true);
 	dnssec[Answer::Type::root_nodata] = new Answer(empty, soa, empty, true, true);
+
+	plain[Answer::Type::root_any] = new Answer(soa + ns + nsec + dnskey, empty, glue, true, true);
+	dnssec[Answer::Type::root_any] = new Answer(soa + ns + nsec + dnskey, empty, glue, true, true);
 }
 
 void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone)
 {
-	RRList empty, soa, ns, ds, glue;
+	RRList empty, soa, ns, ds;
 
 	// temporary const_cast for older versions of ldns
 	auto _name = const_cast<ldns_dnssec_name*>(name);
@@ -135,7 +142,7 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 
 	// fill out glue
 	auto ns_rrl = ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_NS);
-	find_glue(glue, ns_rrl, zone);
+	RRList glue = find_glue(ns_rrl, zone);
 
 	// create unsigned answers
 	plain[Answer::Type::tld_ds] = new Answer(ds, empty, empty, true);
@@ -148,12 +155,9 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 	soa.append(zone->soa->nsec);
 	soa.append(zone->soa->nsec_signatures);
 
-	// signed referral requires signed DS record
-	ns.append(ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_DS));
-
-	// create signed answers
+	// create signed answers - signed referral requires signed DS record
 	dnssec[Answer::Type::tld_ds] = new Answer(ds, empty, empty, true, true);
-	dnssec[Answer::Type::tld_referral] = new Answer(empty, ns, glue, false, true);
+	dnssec[Answer::Type::tld_referral] = new Answer(empty, ns + ds, glue, false, true);
 	dnssec[Answer::Type::nxdomain] = new Answer(empty, soa, empty, true, true);
 }
 

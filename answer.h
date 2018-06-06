@@ -17,7 +17,6 @@ public:
 		root_any,
 		root_nodata,
 		tld_ds,
-		tld_any,
 		tld_referral,
 		nxdomain,
 		max

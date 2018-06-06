@@ -311,8 +311,6 @@ Answer::Type Context::type() const
 	} else if (qlabels == 1) {
 		if (qtype == LDNS_RR_TYPE_DS) {
 			return Answer::Type::tld_ds;
-		} else if (qtype == LDNS_RR_TYPE_ANY) {
-			return Answer::Type::tld_any;
 		} else {
 			return Answer::Type::tld_referral;
 		}
