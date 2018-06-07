@@ -52,7 +52,7 @@ void Answer::dname_to_wire(ldns_buffer* lbuf, const ldns_rdf* name)
 	if (iter != c_table.end()) {
 		auto pos = iter->second;
 		c_offsets.push_back(ldns_buffer_position(lbuf));
-		ldns_buffer_write_u16(lbuf, pos);
+		ldns_buffer_write_u16(lbuf, htons(pos | 0xc000));	// want host order in the buffer
 		return;
 	}
 
@@ -129,7 +129,7 @@ iovec Answer::data_offset_by(const uint16_t offset, uint8_t *out) const
 
 	for (auto n: c_offsets) {
 		auto& p = *reinterpret_cast<uint16_t*>(out + n);
-		p = htons((ntohs(p) + offset) | 0xc000);
+		p = htons(p + offset);
 	}
 
 	return iovec { out, size };

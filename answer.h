@@ -9,7 +9,7 @@
 #include "rrlist.h"
 
 struct DNameCompare {
-        bool operator()(const ldns_rdf* a, const ldns_rdf* b) {
+        bool operator()(const ldns_rdf* a, const ldns_rdf* b) const {
                 return ldns_dname_compare(a, b) < 0;
         }
 };
