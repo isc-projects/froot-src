@@ -123,9 +123,9 @@ size_t Answer::rrlist_to_wire(ldns_buffer* lbuf, const RRList& rrs, int section,
 	return n;
 }
 
-iovec Answer::data_offset_by(const uint16_t offset, uint8_t *out) const
+iovec Answer::data_offset_by(const uint16_t offset, uint8_t* out) const
 {
-	std::copy(out, out + size, buf);
+	std::copy(buf, buf + size, out);
 
 	for (auto n: c_offsets) {
 		auto& p = *reinterpret_cast<uint16_t*>(out + n);
