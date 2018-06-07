@@ -38,7 +38,7 @@ void Server::send(PacketSocket& s, msghdr& msg, std::vector<iovec>& iov) const
 	auto max_frag = mtu - sizeof ip;
 
 	// state variables
-	auto iter = iov.cbegin() + 1;
+	auto iter = iov.begin() + 1;
 	auto chunk = 0U;
 	auto offset = 0U;
 
@@ -183,7 +183,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 
 		// calculate UDP length
 		size_t udp_len = 0;
-		for (const auto iter = iov.cbegin() + 1; iter != iov.cend(); ++iter) {
+		for (auto iter = iov.cbegin() + 1; iter != iov.cend(); ++iter) {
 			udp_len += iter->iov_len;
 		}
 		udp_out.uh_ulen = htons(udp_len);
