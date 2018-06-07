@@ -41,6 +41,7 @@ public:
 private:
 	uint8_t*		buf;
 	size_t			size;
+	uint16_t		fix_offset;
 	bool			aa_bit = false;
 	CompressTable		c_table;
 	CompressOffsets		c_offsets;
@@ -51,7 +52,7 @@ public:
 	uint16_t		arcount = 0;
 
 public:
-	Answer(const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit, bool sigs = false);
+	Answer(uint16_t fix_offset, const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit, bool sigs = false);
 	~Answer();
 
 				operator iovec() const { return iovec { buf, size }; };
