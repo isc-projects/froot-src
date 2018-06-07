@@ -125,7 +125,7 @@ size_t Answer::rrlist_to_wire(ldns_buffer* lbuf, const RRList& rrs, int section,
 
 iovec Answer::data_offset_by(const uint16_t offset, uint8_t *out) const
 {
-	::memcpy(out, buf, size);
+	std::copy(out, out + size, buf);
 
 	for (auto n: c_offsets) {
 		auto& p = *reinterpret_cast<uint16_t*>(out + n);
@@ -145,7 +145,7 @@ Answer::Answer(const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit
 	arcount = rrlist_to_wire(lbuf, ar, LDNS_SECTION_ADDITIONAL, sigs);
 
 	size = ldns_buffer_position(lbuf);
-	buf = ldns_buffer_export(lbuf);
+	buf = reinterpret_cast<uint8_t*>(ldns_buffer_export(lbuf));
 	ldns_buffer_free(lbuf);
 }
 

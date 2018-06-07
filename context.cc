@@ -278,7 +278,8 @@ bool Context::execute(std::vector<iovec>& out)
 	tx_hdr.arcount = htons(answer->arcount + has_edns);
 
 	// copy question section and save
-	::memcpy(head.reserve(qdsize), &in[qdstart], qdsize);
+	auto p = &in[qdstart];
+	std::copy(p, p + qdsize, head.reserve(qdsize));
 	out.push_back(head);
 
 	// save answer

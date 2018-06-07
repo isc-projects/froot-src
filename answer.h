@@ -39,7 +39,7 @@ public:
 	};
 
 private:
-	void*			buf;
+	uint8_t*		buf;
 	size_t			size;
 	bool			aa_bit = false;
 	CompressTable		c_table;
