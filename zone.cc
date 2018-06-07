@@ -66,7 +66,7 @@ const AnswerSet* Zone::lookup(const std::string& qname, bool& matched) const
 {
 	// look for an exact match first
 	{
-		auto iter = aux.find(qname);
+		const auto& iter = aux.find(qname);
 		if (iter != aux.end()) {
 			matched = true;
 			return iter->second;
@@ -85,8 +85,8 @@ Zone::Zone()
 
 Zone::~Zone()
 {
-	auto iter = data.begin();
-	while (iter != data.end()) {
+	auto iter = data.cbegin();
+	while (iter != data.cend()) {
 		delete iter->second;
 		++iter;
 	}

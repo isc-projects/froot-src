@@ -48,8 +48,8 @@ void Answer::dname_to_wire(ldns_buffer* lbuf, const ldns_rdf* name)
 		return;
 	}
 
-	auto iter = c_table.find(name);
-	if (iter != c_table.end()) {
+	const auto& iter = c_table.find(name);
+	if (iter != c_table.cend()) {
 		auto pos = iter->second;
 		c_offsets.push_back(ldns_buffer_position(lbuf));
 		ldns_buffer_write_u16(lbuf, htons(pos | 0xc000));	// want host order in the buffer
@@ -107,7 +107,7 @@ size_t Answer::rrlist_to_wire(ldns_buffer* lbuf, const RRList& rrs, int section,
 {
 	size_t n = 0;
 
-	for (auto rrp: rrs.list()) {
+	for (const auto& rrp: rrs.list()) {
 		auto rr = rrp.get();
 		if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_RRSIG) {
 			if (sigs) {
