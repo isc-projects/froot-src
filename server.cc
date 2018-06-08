@@ -135,6 +135,18 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 			(void) in.read(ihl - sizeof ip4_in);
 		}
 
+		// hack for broken AF_PACKET size - recreate the buffer
+		// based on the IP header specified length instead of what
+		// was returned by the AF_PACKET layer
+		if (in.size() == 46) {
+			size_t pos = in.position();
+			size_t len = ntohs(ip4_in.ip_len);
+			if (len < 46) {
+				in = ReadBuffer(buffer, len);
+				(void) in.read(pos);
+			}
+		}
+
 		// UDP only supported
 		if (ip4_in.ip_p != IPPROTO_UDP) return;
 
