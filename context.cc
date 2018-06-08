@@ -1,6 +1,6 @@
+#include <string>
 #include <cstring>
 #include <arpa/inet.h>
-
 #include <ldns/ldns.h>
 
 #include "context.h"

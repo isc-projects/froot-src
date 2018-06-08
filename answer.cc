@@ -1,3 +1,4 @@
+#include <string>
 #include <arpa/inet.h>
 #include <ldns/ldns.h>
 
