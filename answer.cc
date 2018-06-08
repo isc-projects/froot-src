@@ -39,7 +39,7 @@
  *
  */
 
-const Answer* Answer::empty = new Answer(0, RRList(), RRList(), RRList(), false);
+const Answer* Answer::empty = new Answer(nullptr, RRList(), RRList(), RRList(), false);
 
 void Answer::dname_to_wire(ldns_buffer* lbuf, const ldns_rdf* name)
 {
@@ -50,16 +50,16 @@ void Answer::dname_to_wire(ldns_buffer* lbuf, const ldns_rdf* name)
 
 	const auto& iter = c_table.find(name);
 	if (iter != c_table.cend()) {
-		auto pos = iter->second;
 		c_offsets.push_back(ldns_buffer_position(lbuf));
-		ldns_buffer_write_u16(lbuf, (pos + fix_offset) | 0xc000);	// want host order in the buffer
+		auto pos = iter->second;
+		ldns_buffer_write_u16(lbuf, pos | 0xc000);
 		return;
 	}
 
 	uint16_t pos = ldns_buffer_position(lbuf);
 	if (pos < 16384) {
 		auto clone = ldns_rdf_clone(name);
-		c_table[clone] = pos;
+		c_table[clone] = pos + 12 + fix_offset;
 	}
 
 	auto label = ldns_dname_label(name, 0);
@@ -88,7 +88,7 @@ void Answer::rr_to_wire(ldns_buffer* lbuf, const ldns_rr* rr, int section)
 
 		// simple check for DNAME possible here because we know that the
 		// only records with DNAME rdata that appear in the root zone are
-		// compressible NS records
+		// compressible NS or SOA records
 
 		for (auto i = 0U; i < ldns_rr_rd_count(rr); ++i) {
 			auto rdf = ldns_rr_rdf(rr, i);
@@ -143,9 +143,20 @@ iovec Answer::data_offset_by(uint16_t offset, uint8_t* out) const
 	return iovec { out, size };
 }
 
-Answer::Answer(uint16_t fix_offset, const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit, bool sigs)
-	: fix_offset(fix_offset), aa_bit(aa_bit)
+Answer::Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit, bool sigs)
+	: aa_bit(aa_bit)
 {
+	// calculate likely size of response sections and pre-fill
+	// the compression table with the TLD in the question section
+	// (nb: may get adjusted later if the real question is longer)
+	if (name && ldns_rdf_size(name) > 1) {
+		auto clone = ldns_rdf_clone(name);
+		fix_offset = 4 + ldns_rdf_size(clone);
+		c_table[clone] = 12;
+	} else {
+		fix_offset = 5;
+	}
+
 	size_t n = 4096;
 	auto lbuf = ldns_buffer_new(n);
 
@@ -156,6 +167,7 @@ Answer::Answer(uint16_t fix_offset, const RRList& an, const RRList& ns, const RR
 	size = ldns_buffer_position(lbuf);
 	buf = reinterpret_cast<uint8_t*>(ldns_buffer_export(lbuf));
 	ldns_buffer_free(lbuf);
+
 }
 
 Answer::~Answer()
@@ -205,8 +217,8 @@ static RRList find_glue(const ldns_dnssec_rrsets* rrset, const ldns_dnssec_zone*
 
 void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone)
 {
-	uint16_t offset = 17;	// 12 byte header + '.' + qtype + qclass
 	auto name = zone->soa;
+	auto owner = ldns_dnssec_name_name(name);
 
 	RRList empty;
 	RRList soa(ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_SOA));
@@ -220,20 +232,20 @@ void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone)
 	auto ns_rrl = ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_NS);
 	RRList glue = find_glue(ns_rrl, zone);
 
-	plain[Answer::Type::root_soa] = new Answer(offset, soa, ns, glue, true);
-	plain[Answer::Type::root_ns] = new Answer(offset, ns, empty, glue, true);
-	plain[Answer::Type::root_dnskey] = new Answer(offset, dnskey, empty, empty, true);
-	plain[Answer::Type::root_nsec] = new Answer(offset, nsec, ns, glue, true);
-	plain[Answer::Type::root_nodata] = new Answer(offset, empty, soa, empty, true);
+	plain[Answer::Type::root_soa] = new Answer(owner, soa, ns, glue, true);
+	plain[Answer::Type::root_ns] = new Answer(owner, ns, empty, glue, true);
+	plain[Answer::Type::root_dnskey] = new Answer(owner, dnskey, empty, empty, true);
+	plain[Answer::Type::root_nsec] = new Answer(owner, nsec, ns, glue, true);
+	plain[Answer::Type::root_nodata] = new Answer(owner, empty, soa, empty, true);
 
-	dnssec[Answer::Type::root_soa] = new Answer(offset, soa, ns, glue, true, true);
-	dnssec[Answer::Type::root_ns] = new Answer(offset, ns, empty, glue, true, true);
-	dnssec[Answer::Type::root_dnskey] = new Answer(offset, dnskey, empty, empty, true, true);
-	dnssec[Answer::Type::root_nsec] = new Answer(offset, nsec, ns, glue, true, true);
-	dnssec[Answer::Type::root_nodata] = new Answer(offset, empty, soa, empty, true, true);
+	dnssec[Answer::Type::root_soa] = new Answer(owner, soa, ns, glue, true, true);
+	dnssec[Answer::Type::root_ns] = new Answer(owner, ns, empty, glue, true, true);
+	dnssec[Answer::Type::root_dnskey] = new Answer(owner, dnskey, empty, empty, true, true);
+	dnssec[Answer::Type::root_nsec] = new Answer(owner, nsec, ns, glue, true, true);
+	dnssec[Answer::Type::root_nodata] = new Answer(owner, empty, soa, empty, true, true);
 
-	plain[Answer::Type::root_any] = new Answer(offset, soa + ns + nsec + dnskey, empty, glue, true, true);
-	dnssec[Answer::Type::root_any] = new Answer(offset, soa + ns + nsec + dnskey, empty, glue, true, true);
+	plain[Answer::Type::root_any] = new Answer(owner, soa + ns + nsec + dnskey, empty, glue, true, true);
+	dnssec[Answer::Type::root_any] = new Answer(owner, soa + ns + nsec + dnskey, empty, glue, true, true);
 }
 
 void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone)
@@ -241,8 +253,7 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 	// temporary const_cast for older versions of ldns
 	auto _name = const_cast<ldns_dnssec_name*>(name);
 
-	// size of expected answer section
-	uint16_t offset = ldns_rdf_size(ldns_dnssec_name_name(name)) + 4 + 12;
+	auto owner = ldns_dnssec_name_name(_name);
 
 	RRList empty;
 	RRList soa(ldns_dnssec_name_find_rrset(zone->soa, LDNS_RR_TYPE_SOA));
@@ -254,9 +265,9 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 	RRList glue = find_glue(ns_rrl, zone);
 
 	// create unsigned answers
-	plain[Answer::Type::tld_ds] = new Answer(offset, ds, empty, empty, true);
-	plain[Answer::Type::tld_referral] = new Answer(offset, empty, ns, glue, false);
-	plain[Answer::Type::nxdomain] = new Answer(offset, empty, soa, empty, true);
+	plain[Answer::Type::tld_ds] = new Answer(owner, ds, empty, empty, true);
+	plain[Answer::Type::tld_referral] = new Answer(owner, empty, ns, glue, false);
+	plain[Answer::Type::nxdomain] = new Answer(owner, empty, soa, empty, true);
 
 	// signed SOA in NXD requires NSEC records
 	soa.append(name->nsec);
@@ -265,9 +276,9 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 	soa.append(zone->soa->nsec_signatures);
 
 	// create signed answers - signed referral requires signed DS record
-	dnssec[Answer::Type::tld_ds] = new Answer(offset, ds, empty, empty, true, true);
-	dnssec[Answer::Type::tld_referral] = new Answer(offset, empty, ns + ds, glue, false, true);
-	dnssec[Answer::Type::nxdomain] = new Answer(offset, empty, soa, empty, true, true);
+	dnssec[Answer::Type::tld_ds] = new Answer(owner, ds, empty, empty, true, true);
+	dnssec[Answer::Type::tld_referral] = new Answer(owner, empty, ns + ds, glue, false, true);
+	dnssec[Answer::Type::nxdomain] = new Answer(owner, empty, soa, empty, true, true);
 }
 
 AnswerSet::AnswerSet(const ldns_dnssec_name* name, const ldns_dnssec_zone *zone)

@@ -52,7 +52,7 @@ public:
 	uint16_t		arcount = 0;
 
 public:
-	Answer(uint16_t fix_offset, const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit, bool sigs = false);
+	Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit, bool sigs = false);
 	~Answer();
 
 				operator iovec() const { return iovec { buf, size }; };

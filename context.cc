@@ -218,9 +218,9 @@ void Context::parse_packet()
 		return;
 	}
 
-	// apparent bug in AF_PACKET sets min size to 46
-	if (in.available() > 0 && in.size() > 46) {
-		rcode = LDNS_RCODE_FORMERR;	// trailing garbage
+	// check for trailing garbage
+	if (in.available() > 0) {
+		rcode = LDNS_RCODE_FORMERR;
 		return;
 	}
 }
@@ -287,7 +287,7 @@ bool Context::execute(std::vector<iovec>& out)
 		if (answer == Answer::empty) {
 			out.push_back(*answer);
 		} else {
-			out.push_back(answer->data_offset_by(qdsize + 12, _an_buf));
+			out.push_back(answer->data_offset_by(qdsize, _an_buf));
 		}
 	}
 
