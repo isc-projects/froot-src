@@ -92,7 +92,9 @@ benchmark.cc
 ------------
 
 Loads a 10M record file of queries and tests the throughput of a
-`Context` in parsing and generating answers to those queries.
+`Context` in parsing and generating answers to those queries.  NB:
+this does not execute the raw IP packet handling code, just memory
+buffers containing queries and responses.
 
 timer.cc, timer.h
 -----------------
