@@ -26,5 +26,6 @@ public:
 	RRList() = default;
 
 	RRList(const ldns_dnssec_rrsets* rrs);
+	RRList(const RRList& rhs);
 	RRList(RRList&& rhs);
 };

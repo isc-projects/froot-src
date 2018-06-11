@@ -1,5 +1,3 @@
-#include <map>
-
 #include <ldns/ldns.h>
 
 #include "rrlist.h"
@@ -46,6 +44,13 @@ RRList RRList::operator+(const RRList& rhs) const
 RRList::RRList(const ldns_dnssec_rrsets* rrs)
 {
 	append(rrs);
+}
+
+RRList::RRList(const RRList& rhs)
+{
+	for (auto rr: rhs._list) {
+		_list.push_back(rr);
+	}
 }
 
 RRList::RRList(RRList&& rhs)
