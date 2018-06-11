@@ -22,11 +22,11 @@ private:
 	Aux aux;
 
 private:
-	void build_answers(const ldns_dnssec_name* name);
-	void build_zone();
+	void build_answers(const ldns_dnssec_name* name, bool compress);
+	void build_zone(bool compress);
 
 public:
-	void load(const std::string& filename);
+	void load(const std::string& filename, bool compress);
 	const AnswerSet* lookup(const std::string& qname, bool& match) const;
 
 public:

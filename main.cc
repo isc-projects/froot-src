@@ -33,6 +33,7 @@ int app(int argc, char *argv[])
 	uint16_t port = 53;
 	auto max_threads = std::thread::hardware_concurrency();
 	auto threads = max_threads;
+	auto compress = true;
 
 	--argc;
 	++argv;
@@ -43,6 +44,7 @@ int app(int argc, char *argv[])
 			case 'f': argc--; argv++; zfname = *argv; break;
 			case 'p': argc--; argv++; port = atoi(*argv); break;
 			case 'T': argc--; argv++; threads = atoi(*argv); break;
+			case 'C': compress = false; break;
 			case 'h': usage(EXIT_SUCCESS);
 			default: usage();
 		}
@@ -59,7 +61,7 @@ int app(int argc, char *argv[])
 	threads = std::max(1U, threads);
 
 	Server server;
-	server.load(zfname);
+	server.load(zfname, compress);
 
 	std::vector<std::thread> workers(threads);
 	std::vector<PacketSocket> socks(threads);

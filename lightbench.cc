@@ -38,14 +38,43 @@ void worker(const Zone& zone, const QueryFile& queries)
 	}
 }
 
+void usage(int result = EXIT_FAILURE)
+{
+        using namespace std;
+
+        cout << "lightbench [-C]" << endl;
+        cout << "  -C disable compression" << endl;
+
+        exit(result);
+}
+
 int app(int argc, char *argv[])
 {
+        auto compress = true;
+
+        --argc;
+        ++argv;
+        while (argc > 0 && **argv == '-') {
+                char o = *++*argv;
+                switch (o) {
+                        case 'C': compress = false; break;
+                        case 'h': usage(EXIT_SUCCESS);
+                        default: usage();
+                }
+                --argc;
+                ++argv;
+        }
+
+        if (argc) {
+                usage();
+        }
+
 	Zone zone;
 	QueryFile queries;
 
 	{
 		BenchmarkTimer t("load zone");
-		zone.load("root.zone");
+		zone.load("root.zone", compress);
 	}
 
 	{

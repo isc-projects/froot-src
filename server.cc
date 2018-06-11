@@ -14,9 +14,9 @@
 #include "context.h"
 #include "util.h"
 
-void Server::load(const std::string& filename)
+void Server::load(const std::string& filename, bool compress)
 {
-	zone.load(filename);
+	zone.load(filename, compress);
 }
 
 void dump(const std::vector<iovec>& iov, size_t n)

@@ -99,11 +99,11 @@ private:
         Answer**                dnssec;
 
 private:
-        void generate_root_answers(const ldns_dnssec_zone* zone);
-        void generate_tld_answers(const ldns_dnssec_name*name, const ldns_dnssec_zone* zone);
+        void generate_root_answers(const ldns_dnssec_zone* zone, bool compress);
+        void generate_tld_answers(const ldns_dnssec_name*name, const ldns_dnssec_zone* zone, bool compress);
 
 public:
-        AnswerSet(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone);
+        AnswerSet(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone, bool compress = true);
         ~AnswerSet();
 
 public:

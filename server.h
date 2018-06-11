@@ -18,7 +18,7 @@ private:
 
 public:
 	void worker(PacketSocket& s, uint16_t port);
-	void load(const std::string& filename);
+	void load(const std::string& filename, bool compress);
 
 public:
 	Server();

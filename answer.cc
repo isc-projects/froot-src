@@ -231,7 +231,7 @@ static RRList find_glue(const ldns_dnssec_rrsets* rrset, const ldns_dnssec_zone*
 	return result;
 }
 
-void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone)
+void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone, bool compress)
 {
 	auto name = zone->soa;
 	auto owner = ldns_dnssec_name_name(name);
@@ -269,8 +269,13 @@ void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone)
 	dnssec[Answer::Type::root_any] = new Answer(owner, soa + ns + nsec + dnskey, empty, glue, flags);
 }
 
-void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone)
+void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone, bool compress)
 {
+	Answer::Flags flags = Answer::Flags::none;
+	if (!compress) {
+		flags = flags | Answer::Flags::nocompress;
+	}
+
 	// temporary const_cast for older versions of ldns
 	auto _name = const_cast<ldns_dnssec_name*>(name);
 
@@ -293,17 +298,19 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 	RRList glue = find_glue(ns_rrl, zone);
 
 	// create unsigned answers
-	plain[Answer::Type::tld_ds] = new Answer(owner, ds, empty, empty, Answer::Flags::auth);
-	plain[Answer::Type::tld_referral] = new Answer(owner, empty, ns, glue);
-	plain[Answer::Type::nxdomain] = new Answer(owner, empty, soa, empty, Answer::Flags::auth);
+	plain[Answer::Type::tld_ds] = new Answer(owner, ds, empty, empty, flags | Answer::Flags::auth);
+	plain[Answer::Type::tld_referral] = new Answer(owner, empty, ns, glue, flags);
+	plain[Answer::Type::nxdomain] = new Answer(owner, empty, soa, empty, flags | Answer::Flags::auth);
 
 	// create signed answers - signed referral requires signed DS record
-	dnssec[Answer::Type::tld_ds] = new Answer(owner, ds, empty, empty, Answer::Flags::auth | Answer::Flags::dnssec);
-	dnssec[Answer::Type::tld_referral] = new Answer(owner, empty, ns + ds, glue, Answer::Flags::dnssec);
-	dnssec[Answer::Type::nxdomain] = new Answer(owner, empty, signed_soa, empty, Answer::Flags::auth | Answer::Flags::dnssec);
+	flags = flags | Answer::Flags::dnssec;
+
+	dnssec[Answer::Type::tld_ds] = new Answer(owner, ds, empty, empty, flags | Answer::Flags::auth);
+	dnssec[Answer::Type::tld_referral] = new Answer(owner, empty, ns + ds, glue, flags);
+	dnssec[Answer::Type::nxdomain] = new Answer(owner, empty, signed_soa, empty, Answer::Flags::auth);
 }
 
-AnswerSet::AnswerSet(const ldns_dnssec_name* name, const ldns_dnssec_zone *zone)
+AnswerSet::AnswerSet(const ldns_dnssec_name* name, const ldns_dnssec_zone *zone, bool compressed)
 {
 	plain = new Answer*[Answer::Type::max];
 	dnssec = new Answer*[Answer::Type::max];
@@ -314,9 +321,9 @@ AnswerSet::AnswerSet(const ldns_dnssec_name* name, const ldns_dnssec_zone *zone)
 	}
 
 	if (name == zone->soa) {
-		generate_root_answers(zone);
+		generate_root_answers(zone, compressed);
 	} else {
-		generate_tld_answers(name, zone);
+		generate_tld_answers(name, zone, compressed);
 	}
 }
 

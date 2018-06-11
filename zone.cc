@@ -9,7 +9,7 @@
 #include "zone.h"
 #include "util.h"
 
-void Zone::build_answers(const ldns_dnssec_name* name)
+void Zone::build_answers(const ldns_dnssec_name* name, bool compressed)
 {
 	auto owner = name->name;
 	auto str = ldns_rdf2str(owner);
@@ -18,12 +18,12 @@ void Zone::build_answers(const ldns_dnssec_name* name)
 	std::string key = strlower(p, len);
 	free(str);
 
-	auto nd = new AnswerSet(name, zone);
+	auto nd = new AnswerSet(name, zone, compressed);
 	data.insert({key, nd});
 	aux.insert({key, nd});
 }
 
-void Zone::build_zone()
+void Zone::build_zone(bool compressed)
 {
 	auto node = ldns_rbtree_first(zone->names);
 	while (node != LDNS_RBTREE_NULL) {
@@ -32,13 +32,13 @@ void Zone::build_zone()
 		auto name = const_cast<ldns_dnssec_name *>(tmp);
 
 		if (!ldns_dnssec_name_is_glue(name)) {
-			build_answers(name);
+			build_answers(name, compressed);
 		}
 		node = ldns_rbtree_next(node);
 	}
 }
 
-void Zone::load(const std::string& filename)
+void Zone::load(const std::string& filename, bool compressed)
 {
 	if (zone != nullptr) {
 		ldns_dnssec_zone_deep_free(zone);
@@ -59,7 +59,7 @@ void Zone::load(const std::string& filename)
 	}
 
 	ldns_dnssec_zone_mark_glue(zone);
-	build_zone();
+	build_zone(compressed);
 }
 
 const AnswerSet* Zone::lookup(const std::string& qname, bool& matched) const

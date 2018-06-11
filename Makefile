@@ -12,7 +12,7 @@ LIBS = $(shell pkg-config $(LDNSPKG) --libs)
 CXXFLAGS = -g -O3 -std=c++11 -Wall -Werror -Wno-error=pragmas $(INCS)
 LDFLAGS =
 
-BIN += benchmark
+BIN += lightbench
 COMMON_OBJS = context.o zone.o answer.o rrlist.o util.o
 LIBS += -lpthread -lresolv
 
@@ -23,7 +23,7 @@ all: $(BIN)
 lightning:	main.o server.o packet.o $(COMMON_OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
-benchmark:	 benchmark.o queryfile.o timer.o $(COMMON_OBJS)
+lightbench:	 lightbench.o queryfile.o timer.o $(COMMON_OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
 clean:
@@ -31,7 +31,7 @@ clean:
 
 # dependencies
 answer.o:	answer.h util.h
-benchmark.o:	context.h zone.h queryfile.h timer.h
+lightbench.o:	context.h zone.h queryfile.h timer.h
 context.o:	context.h zone.h util.h
 main.o:		server.h
 packet.o:	packet.h util.h
