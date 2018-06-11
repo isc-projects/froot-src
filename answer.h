@@ -40,7 +40,7 @@ public:
 
 private:
 	uint8_t*		buf;
-	size_t			size;
+	size_t			_size;
 	uint16_t		fix_offset;
 	bool			aa_bit = false;
 	CompressTable		c_table;
@@ -55,7 +55,8 @@ public:
 	Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit, bool sigs = false);
 	~Answer();
 
-				operator iovec() const { return iovec { buf, size }; };
+				operator iovec() const { return iovec { buf, _size }; };
+	size_t			size() const { return _size; };
 	bool			authoritative() const { return aa_bit; };
 	iovec			data_offset_by(uint16_t offset, uint8_t* out) const;
 

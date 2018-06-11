@@ -143,7 +143,12 @@ void Context::parse_edns()
 		return;
 	}
 
+	// read UDP buffer size, and clamp to minimum
 	bufsize = ntohs(in.read<uint16_t>());
+	if (bufsize < 512) {
+		bufsize = 512;
+	}
+
 	(void) in.read<uint8_t>();	// extended rcode
 	auto version = in.read<uint8_t>();
 	auto flags = ntohs(in.read<uint16_t>());
@@ -258,17 +263,28 @@ bool Context::execute(std::vector<iovec>& out)
 		}
 	}
 
+	// response bits
+	bool aa_bit = answer->authoritative();
+	bool tc_bit = false;
+
+	// handle truncation
+	size_t total_len = sizeof(dnshdr) + qdsize + answer->size() + (sizeof(edns_opt_rr) * has_edns);
+	if (total_len > bufsize) {
+		tc_bit = true;
+		answer = Answer::empty;
+	}
+
 	// craft response header
 	auto& tx_hdr = head.reserve<dnshdr>();
 	tx_hdr.id = rx_hdr.id;
 
+	// response flags
 	uint16_t flags = ntohs(rx_hdr.flags);
 	flags &= 0x0110;		// copy RD + CD
 	flags |= 0x8000;		// QR
 	flags |= (rcode & 0x0f);	// set rcode
-	if (answer->authoritative()) {
-		flags |= 0x0400;	// AA bit
-	}
+	flags |= 0x0200 * tc_bit;	// TC bit
+	flags |= 0x0400 * aa_bit;	// AA bit
 	tx_hdr.flags = htons(flags);
 
 	// section counts

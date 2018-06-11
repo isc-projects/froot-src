@@ -128,20 +128,20 @@ iovec Answer::data_offset_by(uint16_t offset, uint8_t* out) const
 {
 	// offset matches minimal offset - use pre-computer answer directly
 	if (offset == fix_offset) {
-		return iovec { buf, size };
+		return iovec { buf, _size };
 	}
 
 	// adjust offset to account for excess
 	offset -= fix_offset;
 
 	// copy buffer and adjust compression pointers
-	std::copy(buf, buf + size, out);
+	std::copy(buf, buf + _size, out);
 	for (auto n: c_offsets) {
 		auto& p = *reinterpret_cast<uint16_t*>(out + n);
 		p = htons(ntohs(p) + offset);
 	}
 
-	return iovec { out, size };
+	return iovec { out, _size };
 }
 
 Answer::Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const RRList& ar, bool aa_bit, bool sigs)
@@ -165,7 +165,7 @@ Answer::Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const R
 	nscount = rrlist_to_wire(lbuf, ns, LDNS_SECTION_AUTHORITY, sigs);
 	arcount = rrlist_to_wire(lbuf, ar, LDNS_SECTION_ADDITIONAL, sigs);
 
-	size = ldns_buffer_position(lbuf);
+	_size = ldns_buffer_position(lbuf);
 	buf = reinterpret_cast<uint8_t*>(ldns_buffer_export(lbuf));
 	ldns_buffer_free(lbuf);
 
