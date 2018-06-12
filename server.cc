@@ -78,7 +78,7 @@ void Server::send(PacketSocket& s, msghdr& msg, std::vector<iovec>& iov) const
 			ip.ip_sum = 0;
 			ip.ip_sum = checksum(&ip, sizeof ip);
 
-			if (::sendmsg(s.fd, &msg, MSG_DONTWAIT) < 0) {
+			if (::sendmsg(s.fd, &msg, 0) < 0) {
 				perror("sendmsg");
 			}
 
@@ -98,15 +98,15 @@ void Server::send(PacketSocket& s, msghdr& msg, std::vector<iovec>& iov) const
 	ip.ip_off = htons(offset >> 3);
 	ip.ip_sum = 0;
 	ip.ip_sum = checksum(&ip, sizeof ip);
-	if (::sendmsg(s.fd, &msg, MSG_DONTWAIT) < 0) {
+	if (::sendmsg(s.fd, &msg, 0) < 0) {
 		perror("sendmsg");
 	}
 }
 
 void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
 {
-	static ip ip4_out;
-	static udphdr udp_out;
+	ip ip4_out;
+	udphdr udp_out;
 
 	// empty frame
 	if (buflen == 0) return;
