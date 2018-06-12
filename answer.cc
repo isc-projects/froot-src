@@ -95,15 +95,18 @@ void Answer::rr_to_wire(ldns_buffer* lbuf, const ldns_rr* rr)
 	dname_to_wire(lbuf, ldns_rr_owner(rr));
 	ldns_buffer_write_u16(lbuf, ldns_rr_get_type(rr));
 	ldns_buffer_write_u16(lbuf, ldns_rr_get_class(rr));
-
 	ldns_buffer_write_u32(lbuf, ldns_rr_ttl(rr));
+
+	// store a dummy RDLENGTH field and remember its position for later
 	uint16_t rdlen_pos = ldns_buffer_position(lbuf);
 	ldns_buffer_write_u16(lbuf, 0);
 
+	// output the sub RDFs that make up the individual fields within
+	// the RDATA of the RR
+	//
 	// simple check for DNAME possible here because we know that the
 	// only records with DNAME rdata that appear in the root zone are
 	// compressible NS or SOA records
-
 	for (auto i = 0U; i < ldns_rr_rd_count(rr); ++i) {
 		auto rdf = ldns_rr_rdf(rr, i);
 		if (ldns_rdf_get_type(rdf) == LDNS_RDF_TYPE_DNAME) {
@@ -113,6 +116,7 @@ void Answer::rr_to_wire(ldns_buffer* lbuf, const ldns_rr* rr)
 		}
 	}
 
+	// overwrite the dummy RDLENGTH field with the real length
 	ldns_buffer_write_u16_at(lbuf, rdlen_pos, ldns_buffer_position(lbuf) - rdlen_pos - 2);
 }
 
@@ -180,10 +184,11 @@ Answer::Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const R
 	nscount = rrlist_to_wire(lbuf, ns);
 	arcount = rrlist_to_wire(lbuf, ar);
 
+	// obtain a reference to the buffer's data which is now
+	// independent of the ldns_buffer object
 	_size = ldns_buffer_position(lbuf);
 	buf = reinterpret_cast<uint8_t*>(ldns_buffer_export(lbuf));
 	ldns_buffer_free(lbuf);
-
 }
 
 Answer::~Answer()
