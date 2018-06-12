@@ -238,6 +238,11 @@ static RRList find_glue(const ldns_dnssec_rrsets* rrset, const ldns_dnssec_zone*
 
 void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone, bool compress)
 {
+	Answer::Flags flags = Answer::Flags::auth;
+	if (!compress) {
+		flags = flags | Answer::Flags::nocompress;
+	}
+
 	auto name = zone->soa;
 	auto owner = ldns_dnssec_name_name(name);
 
@@ -254,7 +259,6 @@ void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone, bool compres
 	RRList glue = find_glue(ns_rrl, zone);
 
 	// unsigned authoritative answers
-	Answer::Flags flags = Answer::Flags::auth;
 	plain[Answer::Type::root_soa] = new Answer(owner, soa, ns, glue, flags);
 	plain[Answer::Type::root_ns] = new Answer(owner, ns, empty, glue, flags);
 	plain[Answer::Type::root_dnskey] = new Answer(owner, dnskey, empty, empty, flags);
