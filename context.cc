@@ -116,7 +116,7 @@ static bool parse_name(ReadBuffer& in, std::string& name, uint8_t& labels)
 	return true;
 }
 
-void Context::parse_edns()
+void Context::parse_edns(ReadBuffer& in)
 {
 	// nothing found
 	if (in.available() == 0) {
@@ -172,7 +172,7 @@ void Context::parse_edns()
 	}
 }
 
-void Context::parse_question()
+void Context::parse_question(ReadBuffer& in)
 {
 	qdstart = in.position();
 
@@ -209,16 +209,16 @@ void Context::parse_question()
 	}
 }
 
-void Context::parse_packet()
+void Context::parse_packet(ReadBuffer& in)
 {
 	rcode = LDNS_RCODE_NOERROR;
 
-	parse_question();
+	parse_question(in);
 	if (rcode != LDNS_RCODE_NOERROR) {
 		return;
 	}
 
-	parse_edns();
+	parse_edns(in);
 	if (rcode != LDNS_RCODE_NOERROR) {
 		return;
 	}
@@ -237,8 +237,11 @@ const Answer* Context::perform_lookup()
 	return set->answer(type(), do_bit);
 }
 
-bool Context::execute(std::vector<iovec>& out)
+bool Context::execute(ReadBuffer& in, std::vector<iovec>& out)
 {
+	reset();
+
+	// default answer
 	auto answer = Answer::empty;
 
 	// drop invalid packets
@@ -256,7 +259,7 @@ bool Context::execute(std::vector<iovec>& out)
 		if (opcode != LDNS_PACKET_QUERY) {
 			rcode = LDNS_RCODE_NOTIMPL;
 		} else {
-			parse_packet();
+			parse_packet(in);
 			if (rcode == LDNS_RCODE_NOERROR) {
 				answer = perform_lookup();
 			}
@@ -267,12 +270,14 @@ bool Context::execute(std::vector<iovec>& out)
 	bool aa_bit = answer->authoritative();
 	bool tc_bit = false;
 
+#if 0
 	// handle truncation
 	size_t total_len = sizeof(dnshdr) + qdsize + answer->size() + (sizeof(edns_opt_rr) * has_edns);
 	if (total_len > bufsize) {
 		tc_bit = true;
 		answer = Answer::empty;
 	}
+#endif
 
 	// craft response header
 	auto& tx_hdr = head.reserve<dnshdr>();
@@ -352,8 +357,27 @@ Answer::Type Context::type() const
 	}
 }
 
-Context::Context(const Zone& zone, ReadBuffer& in) :
-	zone(zone), in(in)
+// initial state
+void Context::reset()
+{
+	// clear context variables
+        qname.clear();
+	qtype = 0;
+	qdstart = 0;
+	qdsize = 0;
+	bufsize = 512;
+	qlabels = 0;
+	match = false;
+	has_edns = false;
+	do_bit = false;
+	rcode = 0;
+
+	// clear buffer positions
+	head.reset();
+	edns.reset();
+}
+
+Context::Context(const Zone& zone) : zone(zone)
 {
 }
 

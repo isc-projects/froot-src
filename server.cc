@@ -189,9 +189,9 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	iov.push_back( { &udp_out, sizeof udp_out } );
 
 	// created on stack here to avoid use of the heap
-	Context ctx(zone, in);
+	Context ctx(zone);
 
-	if (ctx.execute(iov)) {
+	if (ctx.execute(in, iov)) {
 
 		// calculate UDP length
 		size_t udp_len = 0;

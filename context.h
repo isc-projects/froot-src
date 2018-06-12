@@ -12,9 +12,10 @@ class Zone;
 class Context {
 
 private:
-	void parse_edns();
-	void parse_question();
-	void parse_packet();
+	void reset();
+	void parse_edns(ReadBuffer& in);
+	void parse_question(ReadBuffer& in);
+	void parse_packet(ReadBuffer& in);
 	const Answer* perform_lookup();
 
 private:
@@ -27,28 +28,23 @@ private:
 
 private:
 	const Zone&		zone;
-	ReadBuffer&		in;
 
 private:
 	std::string		qname;
 	uint16_t		qtype;
 	uint16_t		qdstart;
-
-	// initial state
-	uint16_t		qdsize = 0;
-	uint16_t		bufsize = 512;
-	uint8_t			qlabels = 0;
-	bool			match = false;
-	bool			has_edns = false;
-	bool			do_bit = false;
-
-public:
+	uint16_t		qdsize;
+	uint16_t		bufsize;
+	uint8_t			qlabels;
+	bool			match;
+	bool			has_edns;
+	bool			do_bit;
 	uint16_t		rcode;
 
 public:
-	Context(const Zone& zone, ReadBuffer& in);
+	Context(const Zone& zone);
 	~Context();
 
-	bool execute(std::vector<iovec>& iov);
+	bool execute(ReadBuffer& in, std::vector<iovec>& iov);
 	Answer::Type type() const;
 };

@@ -13,6 +13,8 @@ void worker(const Zone& zone, const QueryFile& queries)
 	std::map<bool, uint64_t> tc_count;
 
 	{
+		Context ctx(zone);
+
 		std::vector<iovec> iov;
 		iov.reserve(5);
 
@@ -24,8 +26,7 @@ void worker(const Zone& zone, const QueryFile& queries)
 				ReadBuffer in { q.data(), q.size() };
 				iov.clear();
 
-				Context ctx(zone, in);
-				(void) ctx.execute(iov);
+				(void) ctx.execute(in, iov);
 				if (iov.size() >= 1) {
 
 					auto p = reinterpret_cast<uint8_t*>(iov[0].iov_base);
