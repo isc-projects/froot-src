@@ -14,7 +14,7 @@ uint8_t lower(uint8_t c)
 
 std::string strlower(const uint8_t* p, size_t n)
 {
-	std::string result(reinterpret_cast<const char *>(p), n);
+	std::string result(reinterpret_cast<const char*>(p), n);
 	std::transform(result.cbegin(), result.cend(), result.begin(), lower);
 	return result;
 }
@@ -62,7 +62,7 @@ uint16_t checksum(const void* p, size_t n)
 	n /= 2;
 
 	// TODO: account for odd-n
-        auto w = reinterpret_cast<const uint16_t *>(p);
+        auto w = reinterpret_cast<const uint16_t*>(p);
         for (size_t i = 0; i < n; ++i) {
                 sum += *w++;
         }

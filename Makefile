@@ -9,7 +9,7 @@ endif
 INCS = $(shell pkg-config $(LDNSPKG) --cflags)
 LIBS = $(shell pkg-config $(LDNSPKG) --libs)
 
-CXXFLAGS = -g -O3 -std=c++11 -Wall -Werror -Wno-error=pragmas $(INCS)
+CXXFLAGS = -O3 -std=c++11 -Wall -Werror -Wno-error=pragmas $(INCS)
 LDFLAGS =
 
 BIN += lightbench
@@ -28,6 +28,9 @@ lightbench:	 lightbench.o queryfile.o timer.o $(COMMON_OBJS)
 
 clean:
 	$(RM) $(BIN) *.o
+
+.cc.s:
+	$(CXX) -S $^ $(CXXFLAGS) $(CPPFLAGS)
 
 # dependencies
 answer.o:	answer.h util.h

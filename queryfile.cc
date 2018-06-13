@@ -87,7 +87,7 @@ void QueryFile::read_txt(const std::string& filename)
 
 		try {
 			Record record;
-			list.emplace_back(make_record(name, type));
+			list.push_back(make_record(name, type));
 		} catch (std::runtime_error &e) {
 			std::string error = "reading query file at line "
 					+ std::to_string(line_no)
@@ -120,7 +120,7 @@ void QueryFile::read_raw(const std::string& filename)
 			record.resize(len);
 
 			if (file.read(reinterpret_cast<char*>(record.data()), len)) {
-				list.emplace_back(record);
+				list.push_back(record);
 			}
 		}
 	}

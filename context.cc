@@ -256,14 +256,12 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out)
 	bool aa_bit = answer->authoritative();
 	bool tc_bit = false;
 
-#if 0
 	// handle truncation
 	size_t total_len = sizeof(dnshdr) + qdsize + answer->size() + (sizeof(edns_opt_rr) * has_edns);
 	if (total_len > bufsize) {
 		tc_bit = true;
 		answer = Answer::empty;
 	}
-#endif
 
 	// craft response header
 	auto& tx_hdr = head.reserve<dnshdr>();
