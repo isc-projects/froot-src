@@ -66,6 +66,7 @@ static QueryFile::Record make_record(const std::string& name, const std::string&
 	if (n < 0) {
 		throw std::runtime_error("couldn't parse domain name");
 	} else {
+		record.reserve(n + 11);	// room for an OPT RR later if required
 		record.resize(n);
 		return record;
 	}
@@ -114,9 +115,10 @@ void QueryFile::read_raw(const std::string& filename)
 	while (file) {
 		if (file.read(reinterpret_cast<char*>(&len), sizeof(len))) {
 
-			len = ntohs(len);			// swap to host order
+			len = ntohs(len);		// swap to host order
 
 			Record record;
+			record.reserve(len + 11);	// room for an OPT RR
 			record.resize(len);
 
 			if (file.read(reinterpret_cast<char*>(record.data()), len)) {
@@ -144,4 +146,28 @@ void QueryFile::write_raw(const std::string& filename) const
 	}
 
 	file.close();
+}
+
+void QueryFile::edns(const uint16_t buflen, uint16_t flags)
+{
+	std::vector<uint8_t> opt = {
+		0,					// name
+		0, 41,					// type = OPT
+		static_cast<uint8_t>(buflen >> 8),	// buflen MSB
+		static_cast<uint8_t>(buflen >> 0),	// buflen LSB
+		0,					// xrcode = 0,
+		0,					// version = 0,
+		static_cast<uint8_t>(flags >> 8),	// flags MSB
+		static_cast<uint8_t>(flags >> 0),	// flags LSB
+		0, 0					// rdlen = 0
+	};
+
+	for (auto& query: queries) {
+
+		// adjust ARCOUNT
+		auto* p = reinterpret_cast<uint16_t*>(query.data());
+		p[5] = htons(ntohs(p[5]) + 1);
+
+		query.insert(query.end(), opt.cbegin(), opt.cend());
+	}
 }

@@ -55,15 +55,20 @@ void usage(int result = EXIT_FAILURE)
 {
         using namespace std;
 
-        cout << "lightbench [-C]" << endl;
+        cout << "lightbench [-C] [-b <bufsize] [-D]" << endl;
         cout << "  -C disable compression" << endl;
+        cout << "  -b specify EDNS buffer size" << endl;
+        cout << "  -D send DO bit (implies EDNS)" << endl;
 
         exit(result);
 }
 
 int app(int argc, char *argv[])
 {
-        auto compress = true;
+        bool compress = true;
+	bool edns = false;
+	bool do_bit = false;
+	uint16_t bufsize = 0;
 
         --argc;
         ++argv;
@@ -71,6 +76,8 @@ int app(int argc, char *argv[])
                 char o = *++*argv;
                 switch (o) {
                         case 'C': compress = false; break;
+			case 'b': --argc; ++argv; bufsize = atoi(*argv); edns = true; break;
+			case 'D': do_bit = true; break;
                         case 'h': usage(EXIT_SUCCESS);
                         default: usage();
                 }
@@ -81,6 +88,10 @@ int app(int argc, char *argv[])
         if (argc) {
                 usage();
         }
+
+	if (bufsize < 512) {
+		bufsize = 512;
+	}
 
 	Zone zone;
 	QueryFile queries;
@@ -93,6 +104,11 @@ int app(int argc, char *argv[])
 	{
 		BenchmarkTimer t("load queries");
 		queries.read_raw("default.raw");
+	}
+
+	if (edns || do_bit) {
+		BenchmarkTimer t("add EDNS RRs");
+		queries.edns(bufsize, (do_bit << 15));
 	}
 
 	worker(zone, queries);
