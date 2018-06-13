@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cassert>
 #include <sys/socket.h>		// for iovec
 
 class Buffer {
@@ -12,8 +13,11 @@ protected:
 	size_t			_position = 0;
 
 protected:
+	uint8_t* allocate(size_t n);
+	uint8_t& operator[](size_t x) const;
+
+protected:
 	Buffer(uint8_t* base, size_t size);
-	Buffer() {};
 
 public:
 	size_t size() const;
@@ -29,11 +33,9 @@ public:
 
 public:
 	const void* base() const;
-	const uint8_t* current() const;
-	const uint8_t* read(size_t n);
 
 	template<typename T> const T& read();
-	template<typename T> const T* read_array(size_t n);
+	template<typename T> const T* read(size_t n);
 
 	const uint8_t& operator[](size_t x) const;
 	operator iovec() const;
@@ -42,21 +44,23 @@ public:
 class WriteBuffer : public Buffer {
 
 public:
-	WriteBuffer(const uint8_t* base, size_t size);
+	WriteBuffer(uint8_t* base, size_t size);
 
 public:
 	void* base() const;
-	uint8_t* reserve(size_t n);
 
 	template<typename T> T& reserve();
-	template<typename T> T* reserve_array(size_t n);
+	template<typename T> T* reserve(size_t n);
 
 	uint8_t& operator[](size_t x) const;
 	operator iovec() const;
 };
 
+//---------------------------------------------------------------------
+
 inline Buffer::Buffer(uint8_t* base, size_t size) : _base(base), _size(size)
 {
+	assert(base);
 }
 
 inline ReadBuffer::ReadBuffer(const uint8_t* base, size_t size)
@@ -64,10 +68,12 @@ inline ReadBuffer::ReadBuffer(const uint8_t* base, size_t size)
 {
 }
 
-inline WriteBuffer::WriteBuffer(const uint8_t* base, size_t size)
-	: Buffer(const_cast<uint8_t*>(base), size)
+inline WriteBuffer::WriteBuffer(uint8_t* base, size_t size)
+	: Buffer(base, size)
 {
 }
+
+//---------------------------------------------------------------------
 
 inline void Buffer::reset() {
 	_position = 0;
@@ -82,8 +88,19 @@ inline size_t Buffer::position() const {
 }
 
 inline size_t Buffer::available() const {
+	assert(_size >= _position);
 	return _size - _position;
 }
+
+inline uint8_t* Buffer::allocate(size_t n) {
+	assert(_base);
+	assert(available() >= n);
+	auto p = _base + _position;
+	_position += n;
+	return p;
+}
+
+//---------------------------------------------------------------------
 
 inline const void* ReadBuffer::base() const {
 	return _base;
@@ -93,49 +110,47 @@ inline void* WriteBuffer::base() const {
 	return _base;
 }
 
-inline const uint8_t* ReadBuffer::current() const {
-	return _base + _position;
-}
+//---------------------------------------------------------------------
 
-inline const uint8_t& ReadBuffer::operator[](size_t x) const {
+inline uint8_t& Buffer::operator[](size_t x) const {
+	assert(_base);
+	assert(x < _size);
 	return _base[x];
 }
 
-inline const uint8_t* ReadBuffer::read(size_t n) {
-	auto p = _base + _position;
-	_position += n;
-	return p;
+inline const uint8_t& ReadBuffer::operator[](size_t x) const {
+	return Buffer::operator[](x);
+}
+
+inline uint8_t& WriteBuffer::operator[](size_t x) const {
+	return Buffer::operator[](x);
+}
+
+//---------------------------------------------------------------------
+
+template<typename T>
+const T* ReadBuffer::read(size_t n) {
+	return reinterpret_cast<const T*>(allocate(n * sizeof(T)));
 }
 
 template<typename T>
 const T& ReadBuffer::read() {
-	return *read_array<T>(1);
+	return *read<T>(1);
 }
+
+//---------------------------------------------------------------------
 
 template<typename T>
-const T* ReadBuffer::read_array(size_t n) {
-	return reinterpret_cast<const T*>(read(n * sizeof(T)));
-}
-
-inline uint8_t& WriteBuffer::operator[](size_t x) const {
-	return _base[x];
-}
-
-inline uint8_t* WriteBuffer::reserve(size_t n) {
-	auto p = _base + _position;
-	_position += n;
-	return p;
+T* WriteBuffer::reserve(size_t n) {
+	return reinterpret_cast<T*>(allocate(n * sizeof(T)));
 }
 
 template<typename T>
 T& WriteBuffer::reserve() {
-	return *reserve_array<T>(1);
+	return *reserve<T>(1);
 }
 
-template<typename T>
-T* WriteBuffer::reserve_array(size_t n) {
-	return reinterpret_cast<T*>(reserve(n * sizeof(T)));
-}
+//---------------------------------------------------------------------
 
 inline ReadBuffer::operator iovec() const
 {
@@ -146,3 +161,5 @@ inline WriteBuffer::operator iovec() const
 {
 	return iovec { _base, _position };
 }
+
+//---------------------------------------------------------------------

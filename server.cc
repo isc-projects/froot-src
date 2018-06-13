@@ -132,7 +132,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 		// consume IPv4 header, skipping IP options
 		auto& ip4_in = in.read<struct ip>();
 		if (ihl > sizeof ip4_in) {
-			(void) in.read(ihl - sizeof ip4_in);
+			(void) in.read<uint8_t>(ihl - sizeof ip4_in);
 		}
 
 		// hack for broken AF_PACKET size - recreate the buffer
@@ -143,7 +143,7 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 			size_t len = ntohs(ip4_in.ip_len);
 			if (len < 46) {
 				in = ReadBuffer(buffer, len);
-				(void) in.read(pos);
+				(void) in.read<uint8_t>(pos);
 			}
 		}
 

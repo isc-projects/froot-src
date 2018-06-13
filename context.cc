@@ -1,7 +1,6 @@
 #include <string>
 #include <cstring>
 #include <arpa/inet.h>
-#include <ldns/ldns.h>
 
 #include "context.h"
 #include "zone.h"
@@ -25,25 +24,6 @@ struct __attribute__((__packed__)) edns_opt_rr {
 	uint16_t	flags;
 	uint16_t	rdlen;
 };
-
-//
-// reject headers that don't merit any response at all
-//
-static bool legal_header(const ReadBuffer& in)
-{
-	// minimum packet length = 12 + 1 + 2 + 2
-	if (in.available() < 17) {
-		return false;
-	}
-
-	// QR is set inbound
-	auto header = in.current();
-	if (header[2] & 0x80) {
-		return false;
-	}
-
-	return true;
-}
 
 static bool valid_header(const dnshdr& h)
 {
@@ -103,7 +83,7 @@ static bool parse_name(ReadBuffer& in, std::string& name, uint8_t& labels)
 		}
 
 		// consume the label
-		(void) in.read(c);
+		(void) in.read<uint8_t>(c);
 	}
 
 	// should now be pointing at one beyond the root label
@@ -161,7 +141,7 @@ void Context::parse_edns(ReadBuffer& in)
 	}
 
 	// skip the EDNS options
-	(void) in.read(rdlen);
+	(void) in.read<uint8_t>(rdlen);
 
 	// we got a valid EDNS opt RR, so we need to return one
 	has_edns = true;
@@ -239,18 +219,24 @@ const Answer* Context::perform_lookup()
 
 bool Context::execute(ReadBuffer& in, std::vector<iovec>& out)
 {
-	reset();
-
 	// default answer
 	auto answer = Answer::empty;
 
-	// drop invalid packets
-	if (!legal_header(in)) {
+	// clear the context state
+	reset();
+
+	// minimum packet length = 12 + 1 + 2 + 2
+	if (in.available() < 17) {
 		return false;
 	}
 
 	// extract DNS header
 	auto rx_hdr = in.read<dnshdr>();
+
+	// drop if the QR bit is set
+	if (ntohs(rx_hdr.flags) & 0x8000) {
+		return false;
+	}
 
 	if (!valid_header(rx_hdr)) {
 		rcode = LDNS_RCODE_FORMERR;
@@ -300,7 +286,7 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out)
 
 	// copy question section and save
 	auto p = &in[qdstart];
-	std::copy(p, p + qdsize, head.reserve(qdsize));
+	std::copy(p, p + qdsize, head.reserve<uint8_t>(qdsize));
 	out.push_back(head);
 
 	// save answer
