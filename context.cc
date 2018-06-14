@@ -283,8 +283,7 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out)
 	tx_hdr.arcount = htons(answer->arcount + has_edns);
 
 	// copy question section and save
-	auto p = &in[qdstart];
-	std::copy(p, p + qdsize, head.reserve<uint8_t>(qdsize));
+	::memcpy(head.reserve<uint8_t>(qdsize), &in[qdstart], qdsize);
 	out.push_back(head);
 
 	// save answer

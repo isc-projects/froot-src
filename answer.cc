@@ -153,7 +153,8 @@ iovec Answer::data_offset_by(uint16_t offset, uint8_t* out) const
 	offset -= fix_offset;
 
 	// copy buffer and adjust compression pointers
-	std::copy(buf, buf + _size, out);
+	::memcpy(out, buf, _size);
+
 	for (auto n: c_offsets) {
 		auto& p = *reinterpret_cast<uint16_t*>(out + n);
 		p = htons(ntohs(p) + offset);
