@@ -66,7 +66,6 @@ static QueryFile::Record make_record(const std::string& name, const std::string&
 	if (n < 0) {
 		throw std::runtime_error("couldn't parse domain name");
 	} else {
-		record.reserve(n + 11);	// room for an OPT RR later if required
 		record.resize(n);
 		return record;
 	}
@@ -118,7 +117,6 @@ void QueryFile::read_raw(const std::string& filename)
 			len = ntohs(len);		// swap to host order
 
 			Record record;
-			record.reserve(len + 11);	// room for an OPT RR
 			record.resize(len);
 
 			if (file.read(reinterpret_cast<char*>(record.data()), len)) {
@@ -168,6 +166,7 @@ void QueryFile::edns(const uint16_t buflen, uint16_t flags)
 		auto* p = reinterpret_cast<uint16_t*>(query.data());
 		p[5] = htons(ntohs(p[5]) + 1);
 
+		query.reserve(query.size() + 11);
 		query.insert(query.end(), opt.cbegin(), opt.cend());
 	}
 }
