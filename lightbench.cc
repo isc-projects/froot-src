@@ -2,6 +2,8 @@
 #include <iostream>
 #include <map>
 
+#include <unistd.h>	// for getopt
+
 #include "context.h"
 #include "zone.h"
 #include "queryfile.h"
@@ -55,7 +57,7 @@ void usage(int result = EXIT_FAILURE)
 {
         using namespace std;
 
-        cout << "lightbench [-C] [-b <bufsize] [-D]" << endl;
+        cout << "lightbench [-C] [-b <bufsize>] [-D]" << endl;
         cout << "  -C disable compression" << endl;
         cout << "  -b specify EDNS buffer size" << endl;
         cout << "  -D send DO bit (implies EDNS)" << endl;
@@ -70,22 +72,18 @@ int app(int argc, char *argv[])
 	bool do_bit = false;
 	uint16_t bufsize = 0;
 
-        --argc;
-        ++argv;
-        while (argc > 0 && **argv == '-') {
-                char o = *++*argv;
-                switch (o) {
+	int opt;
+	while ((opt = getopt(argc, argv, "Cb:Dh")) != -1) {
+                switch (opt) {
                         case 'C': compress = false; break;
-			case 'b': --argc; ++argv; bufsize = atoi(*argv); edns = true; break;
+			case 'b': bufsize = atoi(optarg); edns = true; break;
 			case 'D': do_bit = true; break;
                         case 'h': usage(EXIT_SUCCESS);
                         default: usage();
                 }
-                --argc;
-                ++argv;
-        }
+	}
 
-        if (argc) {
+        if (optind < argc) {
                 usage();
         }
 

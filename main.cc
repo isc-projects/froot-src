@@ -35,24 +35,20 @@ int app(int argc, char *argv[])
 	auto threads = max_threads;
 	auto compress = true;
 
-	--argc;
-	++argv;
-	while (argc > 0 && **argv == '-') {
-		char o = *++*argv;
-		switch (o) {
-			case 'i': argc--; argv++; ifname = *argv; break;
-			case 'f': argc--; argv++; zfname = *argv; break;
-			case 'p': argc--; argv++; port = atoi(*argv); break;
-			case 'T': argc--; argv++; threads = atoi(*argv); break;
+	int opt;
+	while ((opt = getopt(argc, argv, "i:f:p:T:Ch")) != -1) {
+		switch (opt) {
+			case 'i': ifname = optarg; break;
+			case 'f': zfname = optarg; break;
+			case 'p': port = atoi(optarg); break;
+			case 'T': threads = atoi(optarg); break;
 			case 'C': compress = false; break;
 			case 'h': usage(EXIT_SUCCESS);
 			default: usage();
 		}
-		--argc;
-		++argv;
 	}
 
-	if (argc || !ifname) {
+	if ((optind < argc) || !ifname) {
 		usage();
 	}
 
