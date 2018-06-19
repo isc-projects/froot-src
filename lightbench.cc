@@ -59,7 +59,7 @@ void usage(int result = EXIT_FAILURE)
 
         cout << "lightbench [-C] [-b <bufsize>] [-D]" << endl;
         cout << "  -C disable compression" << endl;
-        cout << "  -b specify EDNS buffer size" << endl;
+        cout << "  -U specify EDNS UDP buffer size" << endl;
         cout << "  -D send DO bit (implies EDNS)" << endl;
 
         exit(result);
@@ -73,11 +73,11 @@ int app(int argc, char *argv[])
 	uint16_t bufsize = 0;
 
 	int opt;
-	while ((opt = getopt(argc, argv, "Cb:Dh")) != -1) {
+	while ((opt = getopt(argc, argv, "CU:Xh")) != -1) {
                 switch (opt) {
                         case 'C': compress = false; break;
-			case 'b': bufsize = atoi(optarg); edns = true; break;
-			case 'D': do_bit = true; break;
+			case 'U': bufsize = atoi(optarg); edns = true; break;
+			case 'X': do_bit = true; break;
                         case 'h': usage(EXIT_SUCCESS);
                         default: usage();
                 }
