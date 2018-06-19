@@ -185,10 +185,10 @@ Answer::Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const R
 	nscount = rrlist_to_wire(lbuf, ns);
 	arcount = rrlist_to_wire(lbuf, ar);
 
-	// obtain a reference to the buffer's data which is now
-	// independent of the ldns_buffer object
+	// take a copy of the buffer, shrunk to fit
 	_size = ldns_buffer_position(lbuf);
-	buf = reinterpret_cast<uint8_t*>(ldns_buffer_export(lbuf));
+	buf = new uint8_t[_size];
+	::memcpy(buf, ldns_buffer_begin(lbuf), _size);
 	ldns_buffer_free(lbuf);
 }
 
@@ -308,16 +308,24 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 	RRList glue = find_glue(ns_rrl, zone);
 
 	// create unsigned answers
-	plain[Answer::Type::tld_ds] = new Answer(owner, ds, empty, empty, flags | Answer::Flags::auth);
+	if (ds.count()) {
+		plain[Answer::Type::tld_ds] = new Answer(owner, ds, empty, empty, flags | Answer::Flags::auth);
+	} else {
+		plain[Answer::Type::tld_ds] = new Answer(owner, empty, soa, empty, flags | Answer::Flags::auth);
+	}
 	plain[Answer::Type::tld_referral] = new Answer(owner, empty, ns, glue, flags);
 	plain[Answer::Type::nxdomain] = new Answer(owner, empty, soa, empty, flags | Answer::Flags::auth);
 
 	// create signed answers - signed referral requires signed DS record
 	flags = flags | Answer::Flags::dnssec;
 
-	dnssec[Answer::Type::tld_ds] = new Answer(owner, ds, empty, empty, flags | Answer::Flags::auth);
+	if (ds.count()) {
+		dnssec[Answer::Type::tld_ds] = new Answer(owner, ds, empty, empty, flags | Answer::Flags::auth);
+	} else {
+		dnssec[Answer::Type::tld_ds] = new Answer(owner, empty, signed_soa, empty, flags | Answer::Flags::auth);
+	}
 	dnssec[Answer::Type::tld_referral] = new Answer(owner, empty, ns + ds, glue, flags);
-	dnssec[Answer::Type::nxdomain] = new Answer(owner, empty, signed_soa, empty, Answer::Flags::auth);
+	dnssec[Answer::Type::nxdomain] = new Answer(owner, empty, signed_soa, empty, flags | Answer::Flags::auth);
 }
 
 AnswerSet::AnswerSet(const ldns_dnssec_name* name, const ldns_dnssec_zone *zone, bool compressed)
