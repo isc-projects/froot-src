@@ -183,13 +183,24 @@ Answer::Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const R
 
 	ancount = rrlist_to_wire(lbuf, an);
 	nscount = rrlist_to_wire(lbuf, ns);
-	arcount = rrlist_to_wire(lbuf, ar);
+	arcount = rrlist_to_wire(lbuf, ar) + 1;	// EDNS record too
 
-	// take a copy of the buffer, shrunk to fit
-	_size = ldns_buffer_position(lbuf);
+	// take a copy of the buffer, shrunk to fit, with room for EDNS on the end
+	auto lbsize = ldns_buffer_position(lbuf);
+	_size = lbsize + 11;
 	buf = new uint8_t[_size];
-	::memcpy(buf, ldns_buffer_begin(lbuf), _size);
+	::memcpy(buf, ldns_buffer_begin(lbuf), lbsize);
 	ldns_buffer_free(lbuf);
+
+	// populate the EDNS OPT RR
+	auto& opt = *reinterpret_cast<edns_opt_rr*>(buf + lbsize);
+	opt.name = 0;           // "."
+	opt.type = htons(LDNS_RR_TYPE_OPT);
+	opt.bufsize = htons(1480);
+	opt.ercode = 0;
+	opt.version = 0;
+	opt.flags = htons((flags & Flags::dnssec) ? 0x8000 : 0);
+	opt.rdlen = 0;
 }
 
 Answer::~Answer()

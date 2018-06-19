@@ -247,10 +247,10 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out)
 	bool tc_bit = false;
 
 	// handle truncation
-	size_t total_len = sizeof(dnshdr) + qdsize + answer->size() + (sizeof(edns_opt_rr) * has_edns);
+	size_t total_len = sizeof(dnshdr) + qdsize + answer->size();
 	if (total_len > bufsize) {
 		tc_bit = true;
-		answer = Answer::empty;
+		answer = Answer::empty;		// includes OPT RR
 	}
 
 	// craft response header
@@ -270,7 +270,7 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out)
 	tx_hdr.qdcount = htons(qdsize ? 1 : 0);
 	tx_hdr.ancount = htons(answer->ancount);
 	tx_hdr.nscount = htons(answer->nscount);
-	tx_hdr.arcount = htons(answer->arcount + has_edns);
+	tx_hdr.arcount = htons(answer->arcount);
 
 	// copy question section and save
 	::memcpy(head.reserve<uint8_t>(qdsize), &in[qdstart], qdsize);
@@ -285,17 +285,15 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out)
 		}
 	}
 
-	// add OPT RR if needed
+	// adjust OPT RR if needed
+	auto& payload = out.back();
 	if (has_edns) {
-		auto& opt = edns.reserve<edns_opt_rr>();
-		opt.name = 0;		// "."
-		opt.type = htons(LDNS_RR_TYPE_OPT);
-		opt.bufsize = htons(1480);
-		opt.ercode = (rcode >> 4);
-		opt.version = 0;
-		opt.flags = htons(do_bit ? 0x8000 : 0);
-		opt.rdlen = 0;
-		out.push_back(edns);
+		auto* p = reinterpret_cast<uint8_t*>(payload.iov_base) + payload.iov_len - sizeof(edns_opt_rr);
+		auto& edns = *reinterpret_cast<edns_opt_rr*>(p);
+		edns.ercode = (rcode >> 4);
+	} else {
+		payload.iov_len -= sizeof(edns_opt_rr);
+		tx_hdr.arcount = htons(ntohs(tx_hdr.arcount) - 1);
 	}
 
 	return true;
@@ -347,7 +345,6 @@ void Context::reset()
 
 	// clear buffer positions
 	head.reset();
-	edns.reset();
 }
 
 Context::Context(const Zone& zone) : zone(zone)
