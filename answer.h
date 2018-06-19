@@ -11,6 +11,19 @@
 #include "rrlist.h"
 
 //
+//  Wire format for an EDNS OPT RR
+//
+struct __attribute__((__packed__)) edns_opt_rr {
+        uint8_t         name;
+        uint16_t        type;
+        uint16_t        bufsize;
+        uint8_t         ercode;
+        uint8_t         version;
+        uint16_t        flags;
+        uint16_t        rdlen;
+};
+
+//
 // comparison functor for comparing ldns_rdf* objects
 //
 struct DNameCompare {
