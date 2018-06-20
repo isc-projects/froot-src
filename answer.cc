@@ -210,7 +210,7 @@ Answer::~Answer()
 		ldns_rdf_deep_free(const_cast<ldns_rdf*>(iter.first));
 	}
 
-	free(buf);
+	delete[] buf;
 }
 
 // --------------------------------------------------------------------
