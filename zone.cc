@@ -18,9 +18,9 @@ void Zone::build_answers(const ldns_dnssec_name* name, bool compressed)
 	std::string key = strlower(p, len);
 	free(str);
 
-	auto nd = new AnswerSet(name, zone, compressed);
-	data.insert({key, nd});
-	aux.insert({key, nd});
+	auto nd = std::make_shared<AnswerSet>(name, zone, compressed);
+	data[key] = nd;
+	aux[key] = nd;
 }
 
 void Zone::build_zone(bool compressed)
@@ -69,14 +69,14 @@ const AnswerSet* Zone::lookup(const std::string& qname, bool& matched) const
 		const auto& iter = aux.find(qname);
 		if (iter != aux.end()) {
 			matched = true;
-			return iter->second;
+			return iter->second.get();
 		}
 	}
 
 	// exact match not found, return predecessor (for NSEC generation)
 	matched = false;
 	auto iter = data.lower_bound(qname);
-	return (--iter)->second;
+	return (--iter)->second.get();
 }
 
 Zone::Zone()
@@ -85,10 +85,5 @@ Zone::Zone()
 
 Zone::~Zone()
 {
-	auto iter = data.cbegin();
-	while (iter != data.cend()) {
-		delete iter->second;
-		++iter;
-	}
 	ldns_dnssec_zone_deep_free(zone);
 }

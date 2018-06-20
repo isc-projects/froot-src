@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <string>
 #include <map>
 #include <unordered_map>
@@ -13,8 +14,8 @@ class AnswerSet;
 class Zone {
 
 private:
-	typedef std::map<std::string, const AnswerSet*> Data;
-	typedef std::unordered_map<std::string, const AnswerSet*> Aux;
+	typedef std::map<std::string, std::shared_ptr<const AnswerSet>> Data;
+	typedef std::unordered_map<std::string, std::shared_ptr<const AnswerSet>> Aux;
 
 private:
 	ldns_dnssec_zone*	zone = nullptr;
