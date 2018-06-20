@@ -12,11 +12,9 @@
 void Zone::build_answers(const ldns_dnssec_name* name, bool compressed)
 {
 	auto owner = name->name;
-	auto str = ldns_rdf2str(owner);
-	auto len = strlen(str) - 1;
-	auto p = reinterpret_cast<const uint8_t*>(str);
-	std::string key = strlower(p, len);
-	free(str);
+	auto rdata = ldns_rdf_data(owner);
+	auto len = rdata[0];
+	std::string key = strlower(rdata + 1, len);
 
 	auto nd = std::make_shared<AnswerSet>(name, zone, compressed);
 	data[key] = nd;
