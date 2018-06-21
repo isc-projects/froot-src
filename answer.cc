@@ -42,6 +42,25 @@
 
 const Answer* Answer::empty = new Answer(nullptr, RRList(), RRList(), RRList(), Flags::none);
 
+void Answer::put_name_pointer(const ldns_rdf* name, uint16_t offset)
+{
+	auto clone = ldns_rdf_clone(name);
+	auto ptr = RDFPtr(clone, ldns_rdf_deep_free);
+	c_table[ptr] = offset;
+}
+
+uint16_t Answer::get_name_pointer(const ldns_rdf* name) const
+{
+	auto clone = ldns_rdf_clone(name);
+	auto ptr = RDFPtr(clone, ldns_rdf_deep_free);
+	const auto& iter = c_table.find(ptr);
+	if (iter != c_table.end()) {
+		return iter->second;
+	} else {
+		return 0;
+	}
+}
+
 // TODO: error checking
 void Answer::dname_to_wire(ldns_buffer* lbuf, const ldns_rdf* name)
 {
@@ -58,11 +77,10 @@ void Answer::dname_to_wire(ldns_buffer* lbuf, const ldns_rdf* name)
 	}
 
 	// look up the name in the map of name locations
-	const auto& iter = c_table.find(name);
-	if (iter != c_table.cend()) {
+	auto cpos = get_name_pointer(name);
+	if (cpos) {
 		c_offsets.push_back(ldns_buffer_position(lbuf));
-		auto pos = iter->second;
-		ldns_buffer_write_u16(lbuf, pos | 0xc000);
+		ldns_buffer_write_u16(lbuf, cpos | 0xc000);
 		return;
 	}
 
@@ -70,8 +88,7 @@ void Answer::dname_to_wire(ldns_buffer* lbuf, const ldns_rdf* name)
 	// offset based on the assumed minimum question section size
 	uint16_t pos = ldns_buffer_position(lbuf);
 	if (pos < 16384) {
-		auto clone = ldns_rdf_clone(name);
-		c_table[clone] = pos + 12 + fix_offset;
+		put_name_pointer(name, pos + 12 + fix_offset);
 	}
 
 	// chop the name in two, writing the left hand label
@@ -171,9 +188,8 @@ Answer::Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const R
 	// (nb: may get adjusted later if the real question is longer)
 
 	if (name && ldns_rdf_size(name) > 1) {
-		auto clone = ldns_rdf_clone(name);
-		fix_offset = 4 + ldns_rdf_size(clone);
-		c_table[clone] = 12;
+		put_name_pointer(name, 12);
+		fix_offset = 4 + ldns_rdf_size(name);
 	} else {
 		fix_offset = 5;
 	}
@@ -184,6 +200,9 @@ Answer::Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const R
 	ancount = rrlist_to_wire(lbuf, an);
 	nscount = rrlist_to_wire(lbuf, ns);
 	arcount = rrlist_to_wire(lbuf, ar) + 1;	// EDNS record too
+
+	// compression table no longer needed
+	c_table.clear();
 
 	// take a copy of the buffer, shrunk to fit, with room for EDNS on the end
 	auto lbsize = ldns_buffer_position(lbuf);
@@ -205,11 +224,6 @@ Answer::Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const R
 
 Answer::~Answer()
 {
-	// clean up compression table pointers
-	for (auto iter: c_table) {
-		ldns_rdf_deep_free(const_cast<ldns_rdf*>(iter.first));
-	}
-
 	delete[] buf;
 }
 

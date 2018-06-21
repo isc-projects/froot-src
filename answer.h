@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <memory>
 #include <vector>
 #include <type_traits>
 
@@ -26,21 +27,28 @@ struct __attribute__((__packed__)) edns_opt_rr {
 //
 // comparison functor for comparing ldns_rdf* objects
 //
-struct DNameCompare {
-        bool operator()(const ldns_rdf* a, const ldns_rdf* b) const {
-                return ldns_dname_compare(a, b) < 0;
-        }
-};
 
 class Answer {
 
 private:
+	typedef std::shared_ptr<const ldns_rdf> RDFPtr;
+
+	struct DNameCompare {
+		bool operator()(RDFPtr a, RDFPtr b) const {
+			return ldns_dname_compare(a.get(), b.get()) < 0;
+		}
+	};
+
+private:
+	uint16_t get_name_pointer(const ldns_rdf* name) const;
+	void put_name_pointer(const ldns_rdf* name, uint16_t offset);
+
 	void dname_to_wire(ldns_buffer* lbuf, const ldns_rdf* name);
 	void rr_to_wire(ldns_buffer* lbuf, const ldns_rr* rr);
 	size_t rrlist_to_wire(ldns_buffer* lbuf, const RRList& rrs);
 
 private:
-	typedef std::map<const ldns_rdf*, uint16_t, DNameCompare> CompressTable;
+	typedef std::map<RDFPtr, uint16_t, DNameCompare> CompressTable;
 	typedef std::vector<uint16_t> CompressOffsets;
 
 public:
