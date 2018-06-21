@@ -58,6 +58,11 @@ void Zone::load(const std::string& filename, bool compressed)
 
 	ldns_dnssec_zone_mark_glue(zone);
 	build_zone(compressed);
+
+	auto soa_rr = ldns_dnssec_name_find_rrset(zone->soa, LDNS_RR_TYPE_SOA)->rrs->rr;
+	auto serial = ldns_rdf2native_int32(ldns_rr_rdf(soa_rr, 2));
+	std::cout << "root zone loaded with SOA serial " << serial << std::endl;
+
 	ldns_dnssec_zone_deep_free(zone);
 }
 
