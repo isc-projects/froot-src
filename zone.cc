@@ -58,6 +58,7 @@ void Zone::load(const std::string& filename, bool compressed)
 
 	ldns_dnssec_zone_mark_glue(zone);
 	build_zone(compressed);
+	ldns_dnssec_zone_deep_free(zone);
 }
 
 const AnswerSet* Zone::lookup(const std::string& qname, bool& matched) const
@@ -83,5 +84,4 @@ Zone::Zone()
 
 Zone::~Zone()
 {
-	ldns_dnssec_zone_deep_free(zone);
 }
