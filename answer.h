@@ -39,9 +39,11 @@ private:
 	void rr_to_wire(ldns_buffer* lbuf, const ldns_rr* rr);
 	size_t rrlist_to_wire(ldns_buffer* lbuf, const RRList& rrs);
 
-public:
+private:
 	typedef std::map<const ldns_rdf*, uint16_t, DNameCompare> CompressTable;
 	typedef std::vector<uint16_t> CompressOffsets;
+
+public:
 
 	// flags passed to the constructor
 	enum Flags : uint16_t {
@@ -95,7 +97,9 @@ public:
 
 };
 
-// convenience operator for combining flags
+// convenience operator for combining Flags returning 'Flags'
+// instead of the automatic promotion to 'int' that the '|'
+// operator usually causes
 inline Answer::Flags operator|(Answer::Flags lhs, Answer::Flags rhs)
 {
 	using T = std::underlying_type<Answer::Flags>::type;
