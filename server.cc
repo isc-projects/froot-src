@@ -18,7 +18,7 @@
 #include "timer.h"
 #include "util.h"
 
-static void loader_thread(Zone& zone, std::string filename, bool compress)
+void Server::loader_thread(std::string filename, bool compress)
 {
 	timespec mtim = { 0, 0 };
 
@@ -27,7 +27,11 @@ static void loader_thread(Zone& zone, std::string filename, bool compress)
 		if (::stat(filename.c_str(), &st) == 0) {
 			if (!(st.st_mtim == mtim)) {
 				mtim = st.st_mtim;
-				zone.load(filename, compress);
+				try {
+					zone.load(filename, compress);
+				} catch (std::exception& e) {
+					std::cerr << "error: " << e.what() << std::endl;
+				}
 			}
 		}
 		std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -36,7 +40,7 @@ static void loader_thread(Zone& zone, std::string filename, bool compress)
 
 void Server::load(const std::string& filename, bool compress)
 {
-	auto t = std::thread(loader_thread, std::ref(zone), filename, compress);
+	auto t = std::thread(&Server::loader_thread, this, filename, compress);
 	t.detach();
 }
 

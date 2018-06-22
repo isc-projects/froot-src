@@ -203,8 +203,13 @@ void Context::parse_packet(ReadBuffer& in)
 const Answer* Context::perform_lookup()
 {
 	auto* set = zone.lookup(qname, match);
-	rcode = match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
-	return set->answer(type(), do_bit);
+	if (set) {
+		rcode = match ? LDNS_RCODE_NOERROR : LDNS_RCODE_NXDOMAIN;
+		return set->answer(type(), do_bit);
+	} else {
+		rcode = LDNS_RCODE_SERVFAIL;
+		return Answer::empty;
+	}
 }
 
 bool Context::execute(ReadBuffer& in, std::vector<iovec>& out)

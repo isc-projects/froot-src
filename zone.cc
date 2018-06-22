@@ -63,13 +63,18 @@ void Zone::load(const std::string& filename, bool compressed)
 
 	auto soa_rr = ldns_dnssec_name_find_rrset(zone->soa, LDNS_RR_TYPE_SOA)->rrs->rr;
 	auto serial = ldns_rdf2native_int32(ldns_rr_rdf(soa_rr, 2));
-	std::cout << "root zone loaded with SOA serial " << serial << std::endl;
-
 	ldns_dnssec_zone_deep_free(zone);
+
+	std::cout << "root zone loaded with SOA serial " << serial << std::endl;
+	loaded = true;
 }
 
 const AnswerSet* Zone::lookup(const std::string& qname, bool& matched) const
 {
+	if (!loaded) {
+		return nullptr;
+	}
+
 	// look for an exact match first
 	{
 		const auto& iter = aux->find(qname);
