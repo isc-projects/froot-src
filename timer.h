@@ -13,6 +13,16 @@ timespec operator-(const timespec& a, const timespec& b);
 timespec operator+(const timespec& a, const timespec& b);
 timespec operator+(const timespec& a, const uint64_t ns);
 
+inline bool operator==(const timespec& a, const timespec& b)
+{
+	return (a.tv_sec == b.tv_sec) && (a.tv_nsec == b.tv_nsec);
+}
+
+inline bool operator!=(const timespec& a, const timespec& b)
+{
+	return !(a == b);
+}
+
 class BenchmarkTimer {
 
 	static uint64_t		current_id;
