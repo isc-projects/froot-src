@@ -1,7 +1,10 @@
 #include <iostream>
 #include <functional>
 #include <vector>
+#include <thread>
+#include <chrono>
 
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -12,11 +15,29 @@
 
 #include "server.h"
 #include "context.h"
+#include "timer.h"
 #include "util.h"
+
+static void loader_thread(Zone& zone, std::string filename, bool compress)
+{
+	timespec mtim = { 0, 0 };
+
+	while (true) {
+		struct stat st;
+		if (::stat(filename.c_str(), &st) == 0) {
+			if (!(st.st_mtim == mtim)) {
+				mtim = st.st_mtim;
+				zone.load(filename, compress);
+			}
+		}
+		std::this_thread::sleep_for(std::chrono::seconds(1));
+	}
+}
 
 void Server::load(const std::string& filename, bool compress)
 {
-	zone.load(filename, compress);
+	auto t = std::thread(loader_thread, std::ref(zone), filename, compress);
+	t.detach();
 }
 
 void dump(const std::vector<iovec>& iov, size_t n)
