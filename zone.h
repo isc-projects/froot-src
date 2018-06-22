@@ -17,13 +17,16 @@ private:
 	typedef std::map<std::string, std::shared_ptr<const AnswerSet>> Data;
 	typedef std::unordered_map<std::string, std::shared_ptr<const AnswerSet>> Aux;
 
-private:
-	ldns_dnssec_zone*	zone = nullptr;
-	Data data;
-	Aux aux;
+	typedef std::shared_ptr<Data> PData;
+	typedef std::shared_ptr<Aux> PAux;
 
 private:
-	void build_answers(const ldns_dnssec_name* name, bool compress);
+	PData data;
+	PAux aux;
+	ldns_dnssec_zone*	zone = nullptr;
+
+private:
+	void build_answers(PData& data, PAux& aux, const ldns_dnssec_name* name, bool compress);
 	void build_zone(bool compress);
 
 public:

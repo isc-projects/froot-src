@@ -1,6 +1,6 @@
-#include <cstdio>
 #include <iostream>
 #include <stdexcept>
+#include <atomic>
 
 #include <arpa/inet.h>
 
@@ -9,7 +9,7 @@
 #include "zone.h"
 #include "util.h"
 
-void Zone::build_answers(const ldns_dnssec_name* name, bool compressed)
+void Zone::build_answers(PData& data, PAux& aux, const ldns_dnssec_name* name, bool compressed)
 {
 	auto owner = name->name;
 	auto rdata = ldns_rdf_data(owner);
@@ -17,12 +17,15 @@ void Zone::build_answers(const ldns_dnssec_name* name, bool compressed)
 	std::string key = strlower(rdata + 1, len);
 
 	auto nd = std::make_shared<AnswerSet>(name, zone, compressed);
-	data[key] = nd;
-	aux[key] = nd;
+	(*data)[key] = nd;
+	(*aux)[key] = nd;
 }
 
 void Zone::build_zone(bool compressed)
 {
+	PData new_data = std::make_shared<Data>();
+	PAux new_aux = std::make_shared<Aux>();
+
 	auto node = ldns_rbtree_first(zone->names);
 	while (node != LDNS_RBTREE_NULL) {
 		// can be const in later versions of ldns
@@ -30,22 +33,21 @@ void Zone::build_zone(bool compressed)
 		auto name = const_cast<ldns_dnssec_name *>(tmp);
 
 		if (!ldns_dnssec_name_is_glue(name)) {
-			build_answers(name, compressed);
+			build_answers(new_data, new_aux, name, compressed);
 		}
 		node = ldns_rbtree_next(node);
 	}
+
+	std::atomic_exchange(&data, new_data);
+	std::atomic_exchange(&aux, new_aux);
 }
 
 void Zone::load(const std::string& filename, bool compressed)
 {
-	if (zone != nullptr) {
-		ldns_dnssec_zone_deep_free(zone);
-	}
-
 	auto origin = ldns_dname_new_frm_str(".");
 	auto fp = fopen(filename.c_str(), "r");
 	if (!fp) {
-		throw_errno("opening zone file");
+		throw_errno("opening zone file: " + filename);
 	}
 
 	auto status = ldns_dnssec_zone_new_frm_fp(&zone, fp, origin, 3600, LDNS_RR_CLASS_IN);
@@ -70,8 +72,8 @@ const AnswerSet* Zone::lookup(const std::string& qname, bool& matched) const
 {
 	// look for an exact match first
 	{
-		const auto& iter = aux.find(qname);
-		if (iter != aux.end()) {
+		const auto& iter = aux->find(qname);
+		if (iter != aux->end()) {
 			matched = true;
 			return iter->second.get();
 		}
@@ -79,7 +81,7 @@ const AnswerSet* Zone::lookup(const std::string& qname, bool& matched) const
 
 	// exact match not found, return predecessor (for NSEC generation)
 	matched = false;
-	auto iter = data.lower_bound(qname);
+	auto iter = data->lower_bound(qname);
 	return (--iter)->second.get();
 }
 
