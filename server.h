@@ -13,9 +13,11 @@ private:
 	uint16_t		port;
 
 private:
-	void loader_thread(std::string filename, bool compress);
-	void send(PacketSocket&s, msghdr& msg, std::vector<iovec>& iov) const;
+	void send(PacketSocket&s, std::vector<iovec>& iov, const sockaddr_ll* addr, socklen_t addrlen) const;
 	void handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata);
+
+private:
+	void loader_thread(std::string filename, bool compress);
 
 public:
 	void worker(PacketSocket& s, uint16_t port);

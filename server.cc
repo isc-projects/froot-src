@@ -21,19 +21,20 @@
 void Server::loader_thread(std::string filename, bool compress)
 {
 	timespec mtim = { 0, 0 };
+	struct stat st;
+	bool first = true;
 
 	while (true) {
-		struct stat st;
-		if (::stat(filename.c_str(), &st) == 0) {
-			if (!(st.st_mtim == mtim)) {
+		int res = ::stat(filename.c_str(), &st);
+		if (first || (res == 0 && !(st.st_mtim == mtim))) {
+			try {
+				zone.load(filename, compress);
 				mtim = st.st_mtim;
-				try {
-					zone.load(filename, compress);
-				} catch (std::exception& e) {
-					std::cerr << "error: " << e.what() << std::endl;
-				}
+			} catch (std::exception& e) {
+				std::cerr << "error: " << e.what() << std::endl;
 			}
 		}
+		first = false;
 		std::this_thread::sleep_for(std::chrono::seconds(1));
 	}
 }
@@ -54,13 +55,41 @@ void dump(const std::vector<iovec>& iov, size_t n)
 	fprintf(stderr, "total len = %ld\n", total);
 }
 
-void Server::send(PacketSocket& s, msghdr& msg, std::vector<iovec>& iov) const
+static void sendfrag_ipv4(int fd, uint16_t offset, uint16_t chunk, msghdr &msg, std::vector<iovec>& iov, size_t iovlen, bool mf)
 {
+	// determine the number of iovecs to send - set here because
+	// the vector's data may have been moved between calls
+	msg.msg_iov = iov.data();
+	msg.msg_iovlen = iovlen;
+
+	// calculate offsets and populate IP header
 	auto& ip = *reinterpret_cast<struct ip*>(iov[0].iov_base);
+	ip.ip_len = htons(chunk + sizeof ip);
+	ip.ip_off = htons((mf << 13) | (offset >> 3));
+	ip.ip_sum = 0;
+	ip.ip_sum = checksum(&ip, sizeof ip);
+
+	if (::sendmsg(fd, &msg, 0) < 0) {
+		perror("sendmsg");
+	}
+}
+
+//
+// send an IP packet, fragmented per the interface MTU
+//
+void Server::send(PacketSocket& s, std::vector<iovec>& iov, const sockaddr_ll* addr, socklen_t addrlen) const
+{
+	// construct response message descriptor
+	msghdr msg;
+	msg.msg_name = reinterpret_cast<void*>(const_cast<sockaddr_ll*>(addr));
+	msg.msg_namelen = addrlen;
+	msg.msg_control = nullptr;
+	msg.msg_controllen = 0;
+	msg.msg_flags = 0;
 
 	// determine maximum payload fragment size
 	auto mtu = s.getmtu();
-	auto max_frag = mtu - sizeof ip;
+	auto max_frag = mtu - sizeof(struct ip);
 
 	// state variables
 	auto iter = iov.begin() + 1;
@@ -93,19 +122,8 @@ void Server::send(PacketSocket& s, msghdr& msg, std::vector<iovec>& iov) const
 			// assignment necessary in case old iterator is invalidated
 			iter = iov.insert(iter, iovec { p + vec.iov_len, len - vec.iov_len});
 
-			// determine the number of iovecs to send
-			msg.msg_iov = iov.data();
-			msg.msg_iovlen = iter - iov.begin();
-
-			// send here
-			ip.ip_len = htons(chunk + sizeof ip);
-			ip.ip_off = htons(0x2000 | (offset >> 3));
-			ip.ip_sum = 0;
-			ip.ip_sum = checksum(&ip, sizeof ip);
-
-			if (::sendmsg(s.fd, &msg, 0) < 0) {
-				perror("sendmsg");
-			}
+			// send fragment (with MF bit)
+			sendfrag_ipv4(s.fd, offset, chunk, msg, iov, iter - iov.begin(), true);
 
 			// remove the already transmitted iovecs (excluding the IP header)
 			iter = iov.erase(iov.begin() + 1, iter);
@@ -116,16 +134,8 @@ void Server::send(PacketSocket& s, msghdr& msg, std::vector<iovec>& iov) const
 		}
 	}
 
-	msg.msg_iov = iov.data();
-	msg.msg_iovlen = iov.size();
-
-	ip.ip_len = htons(chunk + sizeof ip);
-	ip.ip_off = htons(offset >> 3);
-	ip.ip_sum = 0;
-	ip.ip_sum = checksum(&ip, sizeof ip);
-	if (::sendmsg(s.fd, &msg, 0) < 0) {
-		perror("sendmsg");
-	}
+	// send final fragment
+	sendfrag_ipv4(s.fd, offset, chunk, msg, iov, iov.size(), false);
 }
 
 void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
@@ -225,16 +235,8 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 		}
 		udp_out.uh_ulen = htons(udp_len);
 
-		// construct response message
-		msghdr msg;
-		msg.msg_name = reinterpret_cast<void*>(const_cast<sockaddr_ll*>(addr));
-		msg.msg_namelen = sizeof(sockaddr_ll);
-		msg.msg_control = nullptr;
-		msg.msg_controllen = 0;
-		msg.msg_flags = 0;
-
-		// and send it on
-		send(s, msg, iov);
+		// and send the message
+		send(s, iov, addr, sizeof(*addr));
 	}
 }
 
