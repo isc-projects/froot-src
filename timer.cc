@@ -14,9 +14,9 @@ std::ostream& operator<<(std::ostream& os, const timespec& ts)
 	return os;
 }
 
-timespec operator-(const timespec& a, const timespec& b)
+constexpr timespec operator-(const timespec& a, const timespec& b)
 {
-	timespec res;
+	timespec res = { 0 };
 
 	if (a.tv_nsec < b.tv_nsec) {
 		res.tv_sec = a.tv_sec - b.tv_sec - 1;
@@ -29,9 +29,9 @@ timespec operator-(const timespec& a, const timespec& b)
 	return res;
 }
 
-timespec operator+(const timespec& a, const timespec& b)
+constexpr timespec operator+(const timespec& a, const timespec& b)
 {
-	timespec res;
+	timespec res = { 0 };
 
 	res.tv_sec = a.tv_sec + b.tv_sec;
 	res.tv_nsec = a.tv_nsec + b.tv_nsec;
@@ -43,7 +43,7 @@ timespec operator+(const timespec& a, const timespec& b)
 	return res;
 }
 
-timespec operator+(const timespec& a, const uint64_t ns)
+constexpr timespec operator+(const timespec& a, const uint64_t ns)
 {
 	auto div = ldiv(ns, ns_per_s);
 	timespec delta = { div.quot, div.rem };;

@@ -108,7 +108,7 @@ public:
 // convenience operator for combining Flags returning 'Flags'
 // instead of the automatic promotion to 'int' that the '|'
 // operator usually causes
-inline Answer::Flags operator|(Answer::Flags lhs, Answer::Flags rhs)
+constexpr inline Answer::Flags operator|(Answer::Flags lhs, Answer::Flags rhs)
 {
 	using T = std::underlying_type<Answer::Flags>::type;
 

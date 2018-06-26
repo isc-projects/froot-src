@@ -44,5 +44,5 @@ public:
 	~Context();
 
 	bool execute(ReadBuffer& in, std::vector<iovec>& iov);
-	Answer::Type type() const;
+	constexpr Answer::Type type() const;
 };

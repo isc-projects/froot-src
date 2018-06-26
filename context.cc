@@ -304,7 +304,7 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out)
 	return true;
 }
 
-Answer::Type Context::type() const
+constexpr Answer::Type Context::type() const
 {
 	if (!match) {
 		return Answer::Type::nxdomain;

@@ -9,16 +9,16 @@
 #include <string>
 
 std::ostream& operator<<(std::ostream& os, const timespec& ts);
-timespec operator-(const timespec& a, const timespec& b);
-timespec operator+(const timespec& a, const timespec& b);
-timespec operator+(const timespec& a, const uint64_t ns);
+constexpr timespec operator-(const timespec& a, const timespec& b);
+constexpr timespec operator+(const timespec& a, const timespec& b);
+constexpr timespec operator+(const timespec& a, const uint64_t ns);
 
-inline bool operator==(const timespec& a, const timespec& b)
+constexpr inline bool operator==(const timespec& a, const timespec& b)
 {
 	return (a.tv_sec == b.tv_sec) && (a.tv_nsec == b.tv_nsec);
 }
 
-inline bool operator!=(const timespec& a, const timespec& b)
+constexpr inline bool operator!=(const timespec& a, const timespec& b)
 {
 	return !(a == b);
 }
