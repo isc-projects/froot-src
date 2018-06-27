@@ -1,5 +1,7 @@
+#include <cstring>
 #include <iostream>
 #include <functional>
+#include <numeric>
 #include <vector>
 #include <thread>
 #include <chrono>
@@ -10,6 +12,7 @@
 
 #include <arpa/inet.h>
 #include <net/ethernet.h>
+#include <net/if_arp.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 #include <netinet/udp.h>
@@ -46,14 +49,13 @@ void Server::load(const std::string& filename, bool compress)
 	t.detach();
 }
 
-void dump(const std::vector<iovec>& iov, size_t n)
+static size_t payload_length(const std::vector<iovec>& iov)
 {
-	size_t total = 0;
-	for (auto i = 0U; i < n; ++i) {
-		fprintf(stderr, "%16p %4ld\n", iov[i].iov_base, iov[i].iov_len);
-		total += iov[i].iov_len;
-	}
-	fprintf(stderr, "total len = %ld\n", total);
+	return std::accumulate(iov.cbegin() + 1, iov.cend(), 0U,
+		[](size_t a, const iovec& b) {
+			return a + b.iov_len;
+		}
+	);
 }
 
 static void sendfrag_ipv4(int fd, uint16_t offset, uint16_t chunk, msghdr &msg, std::vector<iovec>& iov, size_t iovlen, bool mf)
@@ -141,22 +143,12 @@ void Server::send_ipv4(PacketSocket& s, std::vector<iovec>& iov, const sockaddr_
 
 void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
 {
-	ip ip4_out;
-	udphdr udp_out;
-
 	// buffer for extracting data
 	ReadBuffer in(buffer, buflen);
 
-	// iovecs for sending data
-	std::vector<iovec> iov;
-	iov.reserve(5);		// 5 = L3 + L4 + DNS (header + question) + BODY + EDNS
-
 	// extract L3 header
 	auto version = (in[0] >> 4) & 0x0f;
-
 	if (version != 4) return;
-
-	iov.push_back( { &ip4_out, sizeof ip4_out } );
 
 	// check IP header length
 	auto ihl = 4U * (in[0] & 0x0f);
@@ -167,6 +159,9 @@ void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const 
 	if (ihl > sizeof ip4_in) {
 		(void) in.read<uint8_t>(ihl - sizeof ip4_in);
 	}
+
+	// check if it's for us
+	if (::memcmp(&ip4_in.ip_dst, &addr_v4, sizeof(in_addr)) != 0) return;
 
 	// hack for broken AF_PACKET size - recreate the buffer
 	// based on the IP header specified length instead of what
@@ -183,6 +178,7 @@ void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const 
 	// UDP only supported
 	if (ip4_in.ip_p != IPPROTO_UDP) return;
 
+	ip ip4_out;
 	ip4_out.ip_v = 4;
 	ip4_out.ip_hl = (sizeof ip4_out) / 4;
 	ip4_out.ip_tos = 0;
@@ -207,11 +203,16 @@ void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const 
 	if (sport == 0 || sport == 7 || sport == 123) return;
 
 	// populate response fields
+	udphdr udp_out;
 	udp_out.uh_sport = udp_in.uh_dport;
 	udp_out.uh_dport = udp_in.uh_sport;
 	udp_out.uh_sum = 0;
 	udp_out.uh_ulen = 0;
 
+	// iovecs for sending data
+	std::vector<iovec> iov;
+	iov.reserve(5);		// 5 = L3 + L4 + DNS (header + question) + BODY + EDNS
+	iov.push_back( { &ip4_out, sizeof ip4_out } );
 	iov.push_back( { &udp_out, sizeof udp_out } );
 
 	// created on stack here to avoid use of the heap
@@ -219,16 +220,69 @@ void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const 
 
 	if (ctx.execute(in, iov)) {
 
-		// calculate UDP length
-		size_t udp_len = 0;
-		for (auto iter = iov.cbegin() + 1; iter != iov.cend(); ++iter) {
-			udp_len += iter->iov_len;
-		}
-		udp_out.uh_ulen = htons(udp_len);
+		// update UDP length
+		udp_out.uh_ulen = htons(payload_length(iov));
 
 		// and send the message
 		send_ipv4(s, iov, addr, sizeof(*addr));
 	}
+}
+
+void Server::handle_arp(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
+{
+	ReadBuffer in(buffer, buflen);
+
+	// read fixed size ARP header
+	if (in.available() < sizeof(arphdr)) return;
+	auto hdr = in.read<arphdr>();
+
+	// we only handle requests
+	if (ntohs(hdr.ar_op) != ARPOP_REQUEST) return;
+
+	// we only handle Ethernet
+	if (ntohs(hdr.ar_hrd) != ARPHRD_ETHER) return;
+
+	// we only handle IPv4
+	if (ntohs(hdr.ar_pro) != ETHERTYPE_IP) return;
+
+	// sanity check the lengths
+	if (hdr.ar_hln != 6 || hdr.ar_pln != 4) return;
+
+	// extract the remaining variable length fields
+	if (in.available() < (2 * (hdr.ar_hln + hdr.ar_pln))) return;
+
+	auto sha = in.read<ether_addr>();
+	auto spa = in.read<in_addr>();
+	(void) in.read<ether_addr>();
+	auto tip = in.read<in_addr>();
+
+	// it's not for us
+	if (memcmp(&tip, &addr_v4, sizeof tip) != 0) return;
+
+	// generate reply packet
+	uint8_t reply[28];
+	auto out = WriteBuffer(reply, sizeof reply);
+
+	auto& hdr_out = out.write<arphdr>(hdr);
+	hdr_out.ar_op = htons(ARPOP_REPLY);
+
+	(void) out.write<ether_addr>(s.gethwaddr());
+	(void) out.write<in_addr>(tip);
+	(void) out.write<ether_addr>(sha);
+	(void) out.write<in_addr>(spa);
+
+	// construct response message descriptor
+	iovec iov(out);
+	msghdr msg;
+	msg.msg_name = reinterpret_cast<void*>(const_cast<sockaddr_ll*>(addr));
+	msg.msg_namelen = sizeof(sockaddr_ll);
+	msg.msg_control = nullptr;
+	msg.msg_controllen = 0;
+	msg.msg_flags = 0;
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+
+	::sendmsg(s.fd, &msg, 0);
 }
 
 void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
@@ -237,31 +291,26 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 
 	if (ethertype == ETHERTYPE_IP) {
 		handle_ipv4(s,  buffer, buflen, addr, userdata);
+	} else if (ethertype == ETHERTYPE_ARP) {
+		handle_arp(s,  buffer, buflen, addr, userdata);
 	}
 }
 
-void Server::worker_thread(PacketSocket& s, uint16_t _port)
+void Server::worker_thread(PacketSocket& s, in_addr _addr, uint16_t _port)
 {
-	// set listening port
-	port = ntohs(_port);
-
-	using namespace std::placeholders;
-	PacketSocket::rx_callback_t callback =
-		std::bind(&Server::handle_packet, this, _1, _2, _3, _4, _5);
+	// set listening address and port
+	addr_v4 = _addr;
+	port = htons(_port);
 
 	try {
+		using namespace std::placeholders;
+		auto callback = std::bind(&Server::handle_packet, this, _1, _2, _3, _4, _5);
+
 		while (true) {
 			s.rx_ring_next(callback, -1, nullptr);
 		}
+
 	} catch (std::exception& e) {
 		std::cerr << "worker error: " << e.what() << std::endl;
 	}
-}
-
-Server::Server() : port(htons(8053))
-{
-}
-
-Server::~Server()
-{
 }

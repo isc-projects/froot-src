@@ -1,3 +1,4 @@
+#include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <algorithm>
@@ -6,6 +7,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/mman.h>
+
 #include <netinet/ip.h>
 #include <netinet/udp.h>
 
@@ -59,35 +61,38 @@ int PacketSocket::getopt(int name, uint32_t& val) const
 	return ::getsockopt(fd, SOL_PACKET, name, &val, &len);
 }
 
-size_t PacketSocket::getmtu() const
+void PacketSocket::bind(const std::string& ifnam)
 {
-	return mtu;
-}
-
-void PacketSocket::bind(unsigned int ifindex)
-{
-	// bind the AF_PACKET socket to the specified interface
-	sockaddr_ll saddr = { 0, };
-	saddr.sll_family = AF_PACKET;
-	saddr.sll_ifindex = ifindex;
-
-	if (::bind(fd, reinterpret_cast<sockaddr *>(&saddr), sizeof(saddr)) < 0) {
-		throw_errno("bind AF_PACKET");
+	ifreq ifr;
+	auto n = ifnam.copy(ifr.ifr_name, IFNAMSIZ);
+	if (n < IFNAMSIZ) {
+		ifr.ifr_name[n] = '\0';
 	}
 
 	// get the interface's MTU
-	ifreq ifr;
-	ifr.ifr_ifindex = ifindex;
-	if (::ioctl(fd, SIOCGIFNAME, &ifr) < 0) {
-		throw_errno("ioctl(SIOCGIFNAME)");
-	}
 	if (::ioctl(fd, SIOCGIFMTU, &ifr) < 0) {
 		throw_errno("ioctl(SIOCGIFMTU)");
 	}
 	mtu = ifr.ifr_mtu;
 
+	// get the interface's HWADDR
 	if (::ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
 		throw_errno("ioctl(SIOCGIFHWADDR)");
+	}
+	::memcpy(&hwaddr, &ifr.ifr_hwaddr.sa_data, sizeof hwaddr);
+
+	// get the interface's index for the following bind call
+	if (::ioctl(fd, SIOCGIFINDEX, &ifr) < 0) {
+		throw_errno("ioctl(SIOCGIFINDEX)");
+	}
+
+	// bind the AF_PACKET socket to the specified interface
+	sockaddr_ll saddr = { 0, };
+	saddr.sll_family = AF_PACKET;
+	saddr.sll_ifindex = ifr.ifr_ifindex;
+
+	if (::bind(fd, reinterpret_cast<sockaddr *>(&saddr), sizeof(saddr)) < 0) {
+		throw_errno("bind AF_PACKET");
 	}
 
 	// set the AF_PACKET socket's fanout mode
@@ -95,15 +100,6 @@ void PacketSocket::bind(unsigned int ifindex)
 	if (setopt(PACKET_FANOUT, fanout) < 0) {
 		throw_errno("setsockopt PACKET_FANOUT");
 	}
-}
-
-void PacketSocket::bind(const std::string& ifname)
-{
-	unsigned int index = if_nametoindex(ifname.c_str());
-	if (index == 0) {
-		throw_errno("if_nametoindex");
-	}
-	bind(index);
 }
 
 int PacketSocket::poll(int timeout)
@@ -142,7 +138,7 @@ void PacketSocket::rx_ring_enable(size_t frame_bits, size_t frame_nr)
 	ll_offset = TPACKET_ALIGN(sizeof(struct tpacket_hdr));
 }
 
-int PacketSocket::rx_ring_next(PacketSocket::rx_callback_t callback, int timeout, void *userdata)
+int PacketSocket::rx_ring_next(Callback callback, int timeout, void *userdata)
 {
 	if (!map) {
 		throw std::runtime_error("AF_PACKET rx_ring not enabled");

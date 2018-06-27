@@ -52,6 +52,8 @@ public:
 	template<typename T> T& reserve();
 	template<typename T> T* reserve(size_t n);
 
+	template<typename T> T& write(const T& v);
+
 	uint8_t& operator[](size_t x) const;
 	operator iovec() const;
 };
@@ -148,6 +150,13 @@ T* WriteBuffer::reserve(size_t n) {
 template<typename T>
 T& WriteBuffer::reserve() {
 	return *reserve<T>(1);
+}
+
+template<typename T>
+T& WriteBuffer::write(const T& v) {
+	auto p = reserve<T>(1);
+	*p = v;
+	return *p;
 }
 
 //---------------------------------------------------------------------

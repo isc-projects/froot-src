@@ -17,8 +17,9 @@ void usage(int result = EXIT_FAILURE)
 {
 	using namespace std;
 
-	cout << "lightning -i <ifname> [-z <zonefile>] [-T <threads>]" << endl;
+	cout << "lightning -i <ifname> -s <ipaddr> [-f <zonefile>] [-T <threads>]" << endl;
 	cout << "  -i the network interface to listen on" << endl;
+	cout << "  -s the IP address to answer on" << endl;
 	cout << "  -p the UDP port to listen on (default: 53)" << endl;
 	cout << "  -z the zone file to load (default: root.zone)" << endl;
 	cout << "  -T the number of threads to run (default: ncpus)" << endl;
@@ -30,16 +31,18 @@ int app(int argc, char *argv[])
 {
 	const char *zfname = "root.zone";
 	const char *ifname = nullptr;
+	const char *ipaddr = nullptr;
 	uint16_t port = 53;
 	auto max_threads = std::thread::hardware_concurrency();
 	auto threads = max_threads;
 	auto compress = true;
 
 	int opt;
-	while ((opt = getopt(argc, argv, "i:f:p:T:Ch")) != -1) {
+	while ((opt = getopt(argc, argv, "i:f:s:p:T:Ch")) != -1) {
 		switch (opt) {
 			case 'i': ifname = optarg; break;
 			case 'f': zfname = optarg; break;
+			case 's': ipaddr = optarg; break;
 			case 'p': port = atoi(optarg); break;
 			case 'T': threads = atoi(optarg); break;
 			case 'C': compress = false; break;
@@ -48,8 +51,14 @@ int app(int argc, char *argv[])
 		}
 	}
 
-	if ((optind < argc) || !ifname) {
+	if ((optind < argc) || !ifname || !ipaddr) {
 		usage();
+	}
+
+	in_addr host;
+	if (inet_aton(ipaddr, &host) != 1) {
+		std::cerr << "invalid IP option" << std::endl;
+		return EXIT_FAILURE;
 	}
 
 	// limit thread range
@@ -69,7 +78,7 @@ int app(int argc, char *argv[])
 		socks[i].rx_ring_enable(11, 128);
 
 		workers[i] = std::thread(
-			&Server::worker_thread, &server, std::ref(socks[i]), port);
+			&Server::worker_thread, &server, std::ref(socks[i]), host, port);
 		thread_setcpu(workers[i], i);
 	}
 

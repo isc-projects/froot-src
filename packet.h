@@ -13,7 +13,7 @@
 class PacketSocket {
 
 public:
-	typedef std::function<void (PacketSocket& s, uint8_t* buf, size_t buflen, const sockaddr_ll* addr, void *userdata)> rx_callback_t;
+	typedef std::function<void (PacketSocket& s, uint8_t* buf, size_t buflen, const sockaddr_ll* addr, void *userdata)> Callback;
 
 private:
 	pollfd		pfd;
@@ -23,6 +23,10 @@ private:
 	uint32_t	rx_current = 0;
 	ptrdiff_t	ll_offset;
 	size_t		mtu;
+	ether_addr	hwaddr;
+
+private:
+	void		arp_handler(uint8_t* buf, size_t buflen, const sockaddr_ll* addr);
 
 public:
 	int		fd = -1;
@@ -34,17 +38,17 @@ public:
 	void		open(int proto = ETH_P_ALL);
 	void		close();
 
-	void		bind(unsigned int ifindex);
-	void		bind(const std::string& ifname);
+	void		bind(const std::string& ifnam);
 	int		poll(int timeout = -1);
 
 	int		setopt(int optname, const uint32_t val) const;
 	int		getopt(int optname, uint32_t& val) const;
 
-	size_t		getmtu() const;
+	size_t		getmtu() const { return mtu; };
+	const ether_addr&	gethwaddr() const { return hwaddr; };
 
 	void		rx_ring_enable(size_t frame_bits, size_t frame_nr);
-	int		rx_ring_next(rx_callback_t cb, int timeout = -1, void *userdata = nullptr);
+	int		rx_ring_next(Callback cb, int timeout = -1, void *userdata = nullptr);
 };
 
 #endif // __packet_h
