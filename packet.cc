@@ -86,6 +86,10 @@ void PacketSocket::bind(unsigned int ifindex)
 	}
 	mtu = ifr.ifr_mtu;
 
+	if (::ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
+		throw_errno("ioctl(SIOCGIFHWADDR)");
+	}
+
 	// set the AF_PACKET socket's fanout mode
 	uint32_t fanout = (getpid() & 0xffff) | (PACKET_FANOUT_CPU << 16);
 	if (setopt(PACKET_FANOUT, fanout) < 0) {
@@ -149,6 +153,11 @@ int PacketSocket::rx_ring_next(PacketSocket::rx_callback_t callback, int timeout
 
 	if ((hdr.tp_status & TP_STATUS_USER) == 0) {
 		if (poll(timeout) == 0) return 0;
+	}
+
+	// empty frame - ignore
+	if (hdr.tp_len == 0) {
+		return 0;
 	}
 
 	auto client = reinterpret_cast<sockaddr_ll *>(frame + ll_offset);

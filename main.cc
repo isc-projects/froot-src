@@ -69,7 +69,7 @@ int app(int argc, char *argv[])
 		socks[i].rx_ring_enable(11, 128);
 
 		workers[i] = std::thread(
-			&Server::worker, &server, std::ref(socks[i]), port);
+			&Server::worker_thread, &server, std::ref(socks[i]), port);
 		thread_setcpu(workers[i], i);
 	}
 

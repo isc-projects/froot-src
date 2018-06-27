@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 
 #include <arpa/inet.h>
+#include <net/ethernet.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 #include <netinet/udp.h>
@@ -77,7 +78,7 @@ static void sendfrag_ipv4(int fd, uint16_t offset, uint16_t chunk, msghdr &msg, 
 //
 // send an IP packet, fragmented per the interface MTU
 //
-void Server::send(PacketSocket& s, std::vector<iovec>& iov, const sockaddr_ll* addr, socklen_t addrlen) const
+void Server::send_ipv4(PacketSocket& s, std::vector<iovec>& iov, const sockaddr_ll* addr, socklen_t addrlen) const
 {
 	// construct response message descriptor
 	msghdr msg;
@@ -138,13 +139,10 @@ void Server::send(PacketSocket& s, std::vector<iovec>& iov, const sockaddr_ll* a
 	sendfrag_ipv4(s.fd, offset, chunk, msg, iov, iov.size(), false);
 }
 
-void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
+void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
 {
 	ip ip4_out;
 	udphdr udp_out;
-
-	// empty frame
-	if (buflen == 0) return;
 
 	// buffer for extracting data
 	ReadBuffer in(buffer, buflen);
@@ -156,53 +154,46 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	// extract L3 header
 	auto version = (in[0] >> 4) & 0x0f;
 
-	if (version == 4) {
+	if (version != 4) return;
 
-		iov.push_back( { &ip4_out, sizeof ip4_out } );
+	iov.push_back( { &ip4_out, sizeof ip4_out } );
 
-		// check IP header length
-		auto ihl = 4U * (in[0] & 0x0f);
-		if (in.available() < ihl) return;
+	// check IP header length
+	auto ihl = 4U * (in[0] & 0x0f);
+	if (in.available() < ihl) return;
 
-		// consume IPv4 header, skipping IP options
-		auto& ip4_in = in.read<struct ip>();
-		if (ihl > sizeof ip4_in) {
-			(void) in.read<uint8_t>(ihl - sizeof ip4_in);
-		}
-
-		// hack for broken AF_PACKET size - recreate the buffer
-		// based on the IP header specified length instead of what
-		// was returned by the AF_PACKET layer
-		if (in.size() == 46) {
-			size_t pos = in.position();
-			size_t len = ntohs(ip4_in.ip_len);
-			if (len < 46) {
-				in = ReadBuffer(buffer, len);
-				(void) in.read<uint8_t>(pos);
-			}
-		}
-
-		// UDP only supported
-		if (ip4_in.ip_p != IPPROTO_UDP) return;
-
-		ip4_out.ip_v = 4;
-		ip4_out.ip_hl = (sizeof ip4_out) / 4;
-		ip4_out.ip_tos = 0;
-		ip4_out.ip_len = 0;
-		ip4_out.ip_id = ip4_in.ip_id;
-		ip4_out.ip_off = 0;
-		ip4_out.ip_ttl = 31;
-		ip4_out.ip_p = ip4_in.ip_p;
-		ip4_out.ip_sum = 0;
-		ip4_out.ip_src = ip4_in.ip_dst;
-		ip4_out.ip_dst = ip4_in.ip_src;
-
-	} else if (version == 6) {
-
-		// TODO: IPv6 support
-		return;
-
+	// consume IPv4 header, skipping IP options
+	auto& ip4_in = in.read<struct ip>();
+	if (ihl > sizeof ip4_in) {
+		(void) in.read<uint8_t>(ihl - sizeof ip4_in);
 	}
+
+	// hack for broken AF_PACKET size - recreate the buffer
+	// based on the IP header specified length instead of what
+	// was returned by the AF_PACKET layer
+	if (in.size() == 46) {
+		size_t pos = in.position();
+		size_t len = ntohs(ip4_in.ip_len);
+		if (len < 46) {
+			in = ReadBuffer(buffer, len);
+			(void) in.read<uint8_t>(pos);
+		}
+	}
+
+	// UDP only supported
+	if (ip4_in.ip_p != IPPROTO_UDP) return;
+
+	ip4_out.ip_v = 4;
+	ip4_out.ip_hl = (sizeof ip4_out) / 4;
+	ip4_out.ip_tos = 0;
+	ip4_out.ip_len = 0;
+	ip4_out.ip_id = ip4_in.ip_id;
+	ip4_out.ip_off = 0;
+	ip4_out.ip_ttl = 31;
+	ip4_out.ip_p = ip4_in.ip_p;
+	ip4_out.ip_sum = 0;
+	ip4_out.ip_src = ip4_in.ip_dst;
+	ip4_out.ip_dst = ip4_in.ip_src;
 
 	// consume L4 UDP header
 	if (in.available() < sizeof(udphdr)) return;
@@ -236,11 +227,20 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 		udp_out.uh_ulen = htons(udp_len);
 
 		// and send the message
-		send(s, iov, addr, sizeof(*addr));
+		send_ipv4(s, iov, addr, sizeof(*addr));
 	}
 }
 
-void Server::worker(PacketSocket& s, uint16_t _port)
+void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
+{
+	uint16_t ethertype = htons(addr->sll_protocol);
+
+	if (ethertype == ETHERTYPE_IP) {
+		handle_ipv4(s,  buffer, buflen, addr, userdata);
+	}
+}
+
+void Server::worker_thread(PacketSocket& s, uint16_t _port)
 {
 	// set listening port
 	port = ntohs(_port);
