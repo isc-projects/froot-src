@@ -57,20 +57,3 @@ void hexdump(std::ostream& os, const void* buf, size_t n)
 	os << endl;
 	os.copyfmt(init);
 }
-
-uint16_t checksum(const void* p, size_t n)
-{
-        uint32_t sum = 0;
-	n /= 2;
-
-	// TODO: account for odd-n
-        auto w = reinterpret_cast<const uint16_t*>(p);
-        for (size_t i = 0; i < n; ++i) {
-                sum += *w++;
-        }
-
-        sum = (sum >> 16) + (sum & 0xffff);
-        sum += (sum >> 16);
-
-        return static_cast<uint16_t>(~sum);
-}
