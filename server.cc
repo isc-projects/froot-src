@@ -16,7 +16,9 @@
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 #include <netinet/udp.h>
+#include <netinet/tcp.h>
 
+#include "checksum.h"
 #include "server.h"
 #include "context.h"
 #include "timer.h"
@@ -58,38 +60,42 @@ static size_t payload_length(const std::vector<iovec>& iov)
 	);
 }
 
-static void sendfrag_ipv4(int fd, uint16_t offset, uint16_t chunk, msghdr &msg, std::vector<iovec>& iov, size_t iovlen, bool mf)
+static ssize_t sendmsg(int fd, const sockaddr_ll* addr, std::vector<iovec>& iov, size_t iovlen)
 {
-	// determine the number of iovecs to send - set here because
-	// the vector's data may have been moved between calls
+	msghdr msg;
+
+	msg.msg_name = reinterpret_cast<void*>(const_cast<sockaddr_ll*>(addr));
+        msg.msg_namelen = sizeof(sockaddr_ll);
+        msg.msg_control = nullptr;
+        msg.msg_controllen = 0;
+        msg.msg_flags = 0;
 	msg.msg_iov = iov.data();
 	msg.msg_iovlen = iovlen;
 
+	auto res = ::sendmsg(fd, &msg, 0);
+	if (res < 0) {
+		perror("sendmsg");
+	}
+	return res;
+}
+
+static void sendfrag_ipv4(int fd, const sockaddr_ll* addr, uint16_t offset, uint16_t chunk, std::vector<iovec>& iov, size_t iovlen, bool mf)
+{
 	// calculate offsets and populate IP header
 	auto& ip = *reinterpret_cast<struct ip*>(iov[0].iov_base);
 	ip.ip_len = htons(chunk + sizeof ip);
 	ip.ip_off = htons((mf << 13) | (offset >> 3));
 	ip.ip_sum = 0;
-	ip.ip_sum = checksum(&ip, sizeof ip);
+	ip.ip_sum = Checksum(&ip, sizeof ip).value();
 
-	if (::sendmsg(fd, &msg, 0) < 0) {
-		perror("sendmsg");
-	}
+	sendmsg(fd, addr, iov, iovlen);
 }
 
 //
 // send an IP packet, fragmented per the interface MTU
 //
-void Server::send_ipv4(PacketSocket& s, std::vector<iovec>& iov, const sockaddr_ll* addr, socklen_t addrlen) const
+static void send_ipv4(PacketSocket& s, const sockaddr_ll* addr, std::vector<iovec>& iov)
 {
-	// construct response message descriptor
-	msghdr msg;
-	msg.msg_name = reinterpret_cast<void*>(const_cast<sockaddr_ll*>(addr));
-	msg.msg_namelen = addrlen;
-	msg.msg_control = nullptr;
-	msg.msg_controllen = 0;
-	msg.msg_flags = 0;
-
 	// determine maximum payload fragment size
 	auto mtu = s.getmtu();
 	auto max_frag = mtu - sizeof(struct ip);
@@ -126,7 +132,7 @@ void Server::send_ipv4(PacketSocket& s, std::vector<iovec>& iov, const sockaddr_
 			iter = iov.insert(iter, iovec { p + vec.iov_len, len - vec.iov_len});
 
 			// send fragment (with MF bit)
-			sendfrag_ipv4(s.fd, offset, chunk, msg, iov, iter - iov.begin(), true);
+			sendfrag_ipv4(s.fd, addr, offset, chunk,  iov, iter - iov.begin(), true);
 
 			// remove the already transmitted iovecs (excluding the IP header)
 			iter = iov.erase(iov.begin() + 1, iter);
@@ -138,7 +144,7 @@ void Server::send_ipv4(PacketSocket& s, std::vector<iovec>& iov, const sockaddr_
 	}
 
 	// send final fragment
-	sendfrag_ipv4(s.fd, offset, chunk, msg, iov, iov.size(), false);
+	sendfrag_ipv4(s.fd, addr, offset, chunk, iov, iov.size(), false);
 }
 
 void Server::handle_udp(PacketSocket&s, ReadBuffer& in, const sockaddr_ll* addr, std::vector<iovec>& iov)
@@ -173,12 +179,80 @@ void Server::handle_udp(PacketSocket&s, ReadBuffer& in, const sockaddr_ll* addr,
 		udp_out.uh_ulen = htons(payload_length(iov));
 
 		// and send the message
-		send_ipv4(s, iov, addr, sizeof(*addr));
+		send_ipv4(s, addr, iov);
 	}
+}
+
+struct __attribute__((packed)) tcp_mss_opt {
+	uint8_t		type;
+	uint8_t		len;
+	uint16_t	mss;
+};
+
+static void send_tcp_synack(PacketSocket&s, const sockaddr_ll* addr, std::vector<iovec>& iov)
+{
+	// generate TCP outbound header from inbound header
+	auto& tcp = *reinterpret_cast<tcphdr*>(iov[1].iov_base);
+	std::swap(tcp.th_sport, tcp.th_dport);
+	tcp.th_ack = htonl(ntohl(tcp.th_seq) + 1);
+	tcp.th_seq = 0;		// TODO: pick random
+	tcp.th_win = htons(65535U);
+	tcp.th_sum = 0;
+	tcp.th_urp = 0;
+	tcp.th_flags = TH_SYN | TH_ACK;
+	tcp.th_off = (iov[1].iov_len >> 2);
+
+	// fill out TCP pseudo header and update checksum
+	auto& ip = *reinterpret_cast<struct ip*>(iov[0].iov_base);
+	uint16_t tmp = htons(ip.ip_p);
+	uint16_t len = htons(iov[1].iov_len);
+
+	Checksum crc(iov[1].iov_base, iov[1].iov_len);
+	crc.add(&ip.ip_src, sizeof ip.ip_src);
+	crc.add(&ip.ip_dst, sizeof ip.ip_dst);
+	crc.add(&tmp, sizeof tmp);
+	crc.add(&len, sizeof len);
+
+	tcp.th_sum = crc.value();
+
+	send_ipv4(s, addr, iov);
 }
 
 void Server::handle_tcp(PacketSocket&s, ReadBuffer& in, const sockaddr_ll* addr, std::vector<iovec>& iov)
 {
+	// consume L4 UDP header
+	if (in.available() < sizeof(tcphdr)) return;
+	auto& tcp_in = in.read<tcphdr>();
+
+	// require expected dest port
+	if (tcp_in.th_dport != port) return;
+
+	// find data
+	auto offset = 4U * tcp_in.th_off;
+
+	if (offset < sizeof tcp_in) return;
+	auto skip = offset - sizeof tcp_in;
+	if (in.available() < skip) return;
+	(void) in.read<uint8_t>(skip);
+
+	// fprintf(stderr, "tcp seq = %u, ack = %u, win = %d\n", ntohl(tcp_in.th_seq), ntohl(tcp_in.th_ack), ntohs(tcp_in.th_win));
+	// fprintf(stderr, "    flags = %x, offset = %d\n", tcp_in.th_flags, tcp_in.th_off);
+
+	// create buffer large enough for a TCP header and MSS option
+	uint8_t buf[sizeof(tcp_in) + sizeof(tcp_mss_opt)];
+	WriteBuffer out(buf, sizeof(buf));
+	(void) out.write<tcphdr>(tcp_in);
+
+	if (tcp_in.th_flags & TH_SYN) {
+
+		tcp_mss_opt opt = { TCP_MAXSEG, 4, htons(1220) };
+		(void) out.write<tcp_mss_opt>(opt);
+		iov.push_back(out);
+		send_tcp_synack(s, addr, iov);
+
+	} else if (tcp_in.th_flags & TH_FIN) {
+	} else {
+	}
 }
 
 void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr)

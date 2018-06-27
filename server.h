@@ -16,8 +16,6 @@ private:
 	uint16_t		port;
 
 private:
-	void send_ipv4(PacketSocket&s, std::vector<iovec>& iov, const sockaddr_ll* addr, socklen_t addrlen) const;
-
 	void handle_udp(PacketSocket& s, ReadBuffer& in, const sockaddr_ll* addr, std::vector<iovec>& iov);
 	void handle_tcp(PacketSocket& s, ReadBuffer& in, const sockaddr_ll* addr, std::vector<iovec>& iov);
 
