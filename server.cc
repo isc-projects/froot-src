@@ -141,7 +141,47 @@ void Server::send_ipv4(PacketSocket& s, std::vector<iovec>& iov, const sockaddr_
 	sendfrag_ipv4(s.fd, offset, chunk, msg, iov, iov.size(), false);
 }
 
-void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
+void Server::handle_udp(PacketSocket&s, ReadBuffer& in, const sockaddr_ll* addr, std::vector<iovec>& iov)
+{
+	// consume L4 UDP header
+	if (in.available() < sizeof(udphdr)) return;
+	auto& udp_in = in.read<udphdr>();
+
+	// require expected dest port
+	if (udp_in.uh_dport != port) return;
+
+	// ignore illegal source ports
+	auto sport = ntohs(udp_in.uh_sport);
+	if (sport == 0 || sport == 7 || sport == 123) return;
+
+	// populate response fields
+	udphdr udp_out;
+	udp_out.uh_sport = udp_in.uh_dport;
+	udp_out.uh_dport = udp_in.uh_sport;
+	udp_out.uh_sum = 0;
+	udp_out.uh_ulen = 0;
+
+	// iovecs for sending data
+	iov.push_back( { &udp_out, sizeof udp_out } );
+
+	// created on stack here to avoid use of the heap
+	Context ctx(zone);
+
+	if (ctx.execute(in, iov)) {
+
+		// update UDP length
+		udp_out.uh_ulen = htons(payload_length(iov));
+
+		// and send the message
+		send_ipv4(s, iov, addr, sizeof(*addr));
+	}
+}
+
+void Server::handle_tcp(PacketSocket&s, ReadBuffer& in, const sockaddr_ll* addr, std::vector<iovec>& iov)
+{
+}
+
+void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr)
 {
 	// buffer for extracting data
 	ReadBuffer in(buffer, buflen);
@@ -175,9 +215,11 @@ void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const 
 		}
 	}
 
-	// UDP only supported
-	if (ip4_in.ip_p != IPPROTO_UDP) return;
+	// response chunks get stored here
+	std::vector<iovec> iov;
+	iov.reserve(5);		// 5 = L3 + L4 + DNS (header + question) + BODY + EDNS
 
+	// IPv4 header creation
 	ip ip4_out;
 	ip4_out.ip_v = 4;
 	ip4_out.ip_hl = (sizeof ip4_out) / 4;
@@ -190,45 +232,18 @@ void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const 
 	ip4_out.ip_sum = 0;
 	ip4_out.ip_src = ip4_in.ip_dst;
 	ip4_out.ip_dst = ip4_in.ip_src;
-
-	// consume L4 UDP header
-	if (in.available() < sizeof(udphdr)) return;
-	auto& udp_in = in.read<udphdr>();
-
-	// require expected dest port
-	if (udp_in.uh_dport != port) return;
-
-	// ignore illegal source ports
-	auto sport = ntohs(udp_in.uh_sport);
-	if (sport == 0 || sport == 7 || sport == 123) return;
-
-	// populate response fields
-	udphdr udp_out;
-	udp_out.uh_sport = udp_in.uh_dport;
-	udp_out.uh_dport = udp_in.uh_sport;
-	udp_out.uh_sum = 0;
-	udp_out.uh_ulen = 0;
-
-	// iovecs for sending data
-	std::vector<iovec> iov;
-	iov.reserve(5);		// 5 = L3 + L4 + DNS (header + question) + BODY + EDNS
 	iov.push_back( { &ip4_out, sizeof ip4_out } );
-	iov.push_back( { &udp_out, sizeof udp_out } );
 
-	// created on stack here to avoid use of the heap
-	Context ctx(zone);
+	// dispatch to layer four handling
 
-	if (ctx.execute(in, iov)) {
-
-		// update UDP length
-		udp_out.uh_ulen = htons(payload_length(iov));
-
-		// and send the message
-		send_ipv4(s, iov, addr, sizeof(*addr));
+	if (ip4_in.ip_p == IPPROTO_UDP) {
+		handle_udp(s, in, addr, iov);
+	} else if (ip4_in.ip_p == IPPROTO_TCP) {
+		handle_tcp(s, in, addr, iov);
 	}
 }
 
-void Server::handle_arp(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
+void Server::handle_arp(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr)
 {
 	ReadBuffer in(buffer, buflen);
 
@@ -257,7 +272,7 @@ void Server::handle_arp(PacketSocket& s, uint8_t* buffer, size_t buflen, const s
 	auto tip = in.read<in_addr>();
 
 	// it's not for us
-	if (memcmp(&tip, &addr_v4, sizeof tip) != 0) return;
+	if (::memcmp(&tip, &addr_v4, sizeof tip) != 0) return;
 
 	// generate reply packet
 	uint8_t reply[28];
@@ -290,9 +305,9 @@ void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, cons
 	uint16_t ethertype = htons(addr->sll_protocol);
 
 	if (ethertype == ETHERTYPE_IP) {
-		handle_ipv4(s,  buffer, buflen, addr, userdata);
+		handle_ipv4(s,  buffer, buflen, addr);
 	} else if (ethertype == ETHERTYPE_ARP) {
-		handle_arp(s,  buffer, buflen, addr, userdata);
+		handle_arp(s,  buffer, buflen, addr);
 	}
 }
 

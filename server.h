@@ -18,8 +18,12 @@ private:
 private:
 	void send_ipv4(PacketSocket&s, std::vector<iovec>& iov, const sockaddr_ll* addr, socklen_t addrlen) const;
 
-	void handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata);
-	void handle_arp(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata);
+	void handle_udp(PacketSocket& s, ReadBuffer& in, const sockaddr_ll* addr, std::vector<iovec>& iov);
+	void handle_tcp(PacketSocket& s, ReadBuffer& in, const sockaddr_ll* addr, std::vector<iovec>& iov);
+
+	void handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr);
+	void handle_arp(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr);
+
 	void handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata);
 
 private:
