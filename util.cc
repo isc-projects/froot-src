@@ -24,8 +24,10 @@ void throw_errno(const std::string& what)
 	throw std::system_error(errno, std::system_category(), what);
 }
 
-void hexdump(std::ostream& os, const uint8_t* buf, size_t n)
+void hexdump(std::ostream& os, const void* buf, size_t n)
 {
+	auto p = reinterpret_cast<const uint8_t*>(buf);
+
 	using namespace std;
 
 	ios init(nullptr);
@@ -38,7 +40,7 @@ void hexdump(std::ostream& os, const uint8_t* buf, size_t n)
 
 		os << setw(4) << setfill('0') << i << " ";
 		for ( ; j < 16 && x < n; ++j, ++x) {
-			os << setw(2) << (uint16_t)buf[x] << " ";
+			os << setw(2) << (uint16_t)p[x] << " ";
 		}
 		for ( ; j < 16; ++j) {
 			os << "   ";
@@ -46,7 +48,7 @@ void hexdump(std::ostream& os, const uint8_t* buf, size_t n)
 
 		j = 0; x = i;
 		for ( ; j < 16 && x < n; ++j, ++x) {
-			auto c = buf[x];
+			auto c = p[x];
 			if (c < ' ' || c > 127) c = '.';
 			os << c;
 		}
