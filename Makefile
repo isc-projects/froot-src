@@ -20,7 +20,7 @@ LIBS += -lpthread -lresolv
 
 all: $(BIN)
 
-lightning:	main.o server.o packet.o checksum.o $(COMMON_OBJS)
+lightning:	main.o server.o packet.o $(COMMON_OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
 lightbench:	 lightbench.o queryfile.o timer.o $(COMMON_OBJS)

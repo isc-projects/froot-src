@@ -212,7 +212,7 @@ const Answer* Context::perform_lookup()
 	}
 }
 
-bool Context::execute(ReadBuffer& in, std::vector<iovec>& out)
+bool Context::execute(ReadBuffer& in, std::vector<iovec>& out, bool tcp)
 {
 	// default answer
 	auto answer = Answer::empty;
@@ -253,7 +253,9 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out)
 
 	// handle truncation
 	size_t total_len = sizeof(dnshdr) + qdsize + answer->size();
-	if (total_len > bufsize) {
+	if (tcp) {
+		(void) head.write<uint16_t>(htons(total_len));
+	} else if (total_len > bufsize) {
 		tc_bit = true;
 		answer = Answer::empty;		// includes OPT RR
 	}

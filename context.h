@@ -20,6 +20,7 @@ private:
 
 private:
 	uint8_t			_head_buf[512];
+	uint8_t			_len_buf[2];
 	uint8_t			_an_buf[4096];
 
 	WriteBuffer		head { _head_buf, sizeof(_head_buf) } ;
@@ -43,6 +44,6 @@ public:
 	Context(const Zone& zone);
 	~Context();
 
-	bool execute(ReadBuffer& in, std::vector<iovec>& iov);
+	bool execute(ReadBuffer& in, std::vector<iovec>& iov, bool tcp = false);
 	constexpr Answer::Type type() const;
 };
