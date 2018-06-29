@@ -93,19 +93,25 @@ static void sendfrag_ipv4(int fd, const sockaddr_ll* addr, uint16_t offset, uint
 }
 
 //
-// send an IP packet, fragmented per the interface MTU
+// send an IPv4 packet, fragmented per the interface MTU
 //
 static void send_ipv4(PacketSocket& s, const sockaddr_ll* addr, std::vector<iovec>& iov)
 {
+	thread_local auto rnd = std::mt19937(std::chrono::system_clock::now().time_since_epoch().count() + 1);
+
+	// set a random packet ID
+	auto& ip = *reinterpret_cast<struct ip*>(iov[0].iov_base);
+	ip.ip_id = rnd();
+
 	// determine maximum payload fragment size
 	auto mtu = s.getmtu();
 	auto max_frag = mtu - sizeof(struct ip);
 
 	// state variables
-	auto iter = iov.begin() + 1;
 	auto chunk = 0U;
 	auto offset = 0U;
 
+	auto iter = iov.begin() + 1;
 	while (iter != iov.end()) {
 
 		auto& vec = *iter++;
@@ -194,23 +200,23 @@ static void tcp_checksum(std::vector<iovec>& iov)
 {
 	auto& ip = *reinterpret_cast<struct ip*>(iov[0].iov_base);
 	auto& tcp = *reinterpret_cast<tcphdr*>(iov[1].iov_base);
+
+	// clear staring checksum
 	tcp.th_sum = 0;
 
-	// main header
+	// add pseudo header
 	Checksum crc;
-	crc.add(iov[1]);
-
-	// pseudo header
 	crc.add(&ip.ip_src, sizeof ip.ip_src);
 	crc.add(&ip.ip_dst, sizeof ip.ip_dst);
 	crc.add(ip.ip_p);
 	crc.add(payload_length(iov));
 
 	// payload
-	for (auto iter = iov.cbegin() + 2; iter != iov.cend(); ++iter) {
+	for (auto iter = iov.cbegin() + 1; iter != iov.cend(); ++iter) {
 		crc.add(*iter);
 	}
 
+	// save the result in the packet
 	tcp.th_sum = crc.value();
 }
 
@@ -227,7 +233,7 @@ static void send_tcp_flags(PacketSocket&s, const sockaddr_ll* addr, std::vector<
 	if (flags == (TH_SYN + TH_ACK)) {
 		tcp.th_seq = rnd();
 	} else {
-		tcp.th_seq = ntohl(ack - 1);
+		tcp.th_seq = ntohl(ack);
 	}
 	tcp.th_ack = htonl(seq + 1);
 	tcp.th_flags = flags;
@@ -236,6 +242,9 @@ static void send_tcp_flags(PacketSocket&s, const sockaddr_ll* addr, std::vector<
 	send_ipv4(s, addr, iov);
 }
 
+//
+// assumes that iov[0] contains the IP header and iov[1] contains the TCP header
+//
 static void send_tcp_data(PacketSocket&s, const sockaddr_ll* addr, std::vector<iovec>& iov, uint16_t acked)
 {
 	// generate TCP outbound header from inbound header
@@ -246,9 +255,63 @@ static void send_tcp_data(PacketSocket&s, const sockaddr_ll* addr, std::vector<i
 
 	tcp.th_ack = htonl(seq + acked);
 	tcp.th_seq = htonl(ack);
-	tcp.th_flags = TH_ACK + TH_FIN;
-	tcp_checksum(iov);
+	tcp.th_flags = TH_ACK;
 
+	// use a copy of the vector because send_ipv4() will mutate it
+	std::vector<iovec> out = { iov[0], iov[1] };
+	out.reserve(5);
+
+	// state variables
+	auto segment = 0U;
+	uint16_t mss = s.getmss();
+
+	auto iter = iov.begin() + 2;
+	while (iter != iov.end()) {
+
+		// take the current iovec
+		auto vec = *iter++;
+		auto len = vec.iov_len;
+		segment += len;
+
+		// copy it to the output list
+		out.push_back(vec);
+
+		// did we take too much?
+		if (segment > mss) {
+
+			// how much too much?
+			auto excess = segment - mss;
+			segment = mss;
+
+			// adjust the output iovec's len to the new total length
+			vec.iov_len -= excess;
+			out.back() = vec;
+
+			// insert a new iovec in the input list that holds the left-overs
+			// assignment necessary in case old iterator is invalidated
+			auto p = reinterpret_cast<uint8_t*>(vec.iov_base);
+			iter = iov.insert(iter, iovec { p + vec.iov_len, len - vec.iov_len});
+
+			// send segment
+			tcp_checksum(out);
+			send_ipv4(s, addr, out);
+
+			// remove the already transmitted iovecs (excluding the IP and TCP headers)
+			iter = iov.erase(iov.begin() + 2, iter);
+
+			// get ready for the next segment
+			tcp.th_seq = htonl(ntohl(tcp.th_seq) + segment);
+			out.resize(2);
+			out[0] = iov[0];
+			out[1] = iov[1];
+			segment = 0;
+		}
+	}
+
+	// send final segment
+	tcp.th_flags |= TH_FIN;
+
+	tcp_checksum(iov);
 	send_ipv4(s, addr, iov);
 }
 
@@ -286,8 +349,8 @@ void Server::handle_tcp(PacketSocket&s, ReadBuffer& in, const sockaddr_ll* addr,
 
 	// add MSS option on initial syn
 	if (tcp_in.th_flags & TH_SYN) {
-		tcp_mss_opt opt = { TCP_MAXSEG, 4, htons(1220) };
-		(void) out.write<tcp_mss_opt>(opt);
+		tcp_mss_opt opt = { TCP_MAXSEG, 4, htons(s.getmss()) };
+		out.write<tcp_mss_opt>(opt);
 	}
 
 	// set TCP data offset at current position
@@ -305,6 +368,8 @@ void Server::handle_tcp(PacketSocket&s, ReadBuffer& in, const sockaddr_ll* addr,
 		send_tcp_flags(s, addr, iov, TH_SYN + TH_ACK);
 	} else if ((flags == TH_FIN) || flags == (TH_FIN + TH_ACK)) {
 		send_tcp_flags(s, addr, iov, TH_FIN + TH_ACK);
+	} else if (flags == TH_ACK) {
+		// ignore
 	} else {
 		if (in.available() < 2) {
 			send_tcp_flags(s, addr, iov, TH_RST);
@@ -367,7 +432,6 @@ void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const 
 	ip4_out.ip_hl = (sizeof ip4_out) / 4;
 	ip4_out.ip_tos = 0;
 	ip4_out.ip_len = 0;
-	ip4_out.ip_id = ip4_in.ip_id;
 	ip4_out.ip_off = 0;
 	ip4_out.ip_ttl = 31;
 	ip4_out.ip_p = ip4_in.ip_p;
@@ -423,10 +487,10 @@ void Server::handle_arp(PacketSocket& s, uint8_t* buffer, size_t buflen, const s
 	auto& hdr_out = out.write<arphdr>(hdr);
 	hdr_out.ar_op = htons(ARPOP_REPLY);
 
-	(void) out.write<ether_addr>(s.gethwaddr());
-	(void) out.write<in_addr>(tip);
-	(void) out.write<ether_addr>(sha);
-	(void) out.write<in_addr>(spa);
+	out.write<ether_addr>(s.gethwaddr());
+	out.write<in_addr>(tip);
+	out.write<ether_addr>(sha);
+	out.write<in_addr>(spa);
 
 	// construct response message descriptor
 	iovec iov(out);

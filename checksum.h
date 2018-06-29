@@ -9,6 +9,7 @@ class Checksum {
 
 private:
 	uint32_t sum = 0;
+	bool	 odd = false;
 
 public:
 	Checksum& add(const void* p, size_t len);
@@ -26,20 +27,22 @@ inline uint16_t Checksum::value() const
 	}
 	tmp = ~tmp;
 
-	return static_cast<uint16_t>(tmp);
+	return static_cast<uint16_t>(htons(tmp));
 }
 
 inline Checksum& Checksum::add(const void* p, size_t n)
 {
-        auto w = reinterpret_cast<const uint16_t*>(p);
-        while (n > 1) {
-                sum += *w++;
-		n -= 2;
-        }
+	auto x = reinterpret_cast<const uint8_t*>(p);
 
-	if (n) {
-		auto* q = reinterpret_cast<const char *>(w);
-		sum += ntohl(*q);
+	while (n) {
+		auto c = *x++;
+		if (odd) {
+			sum += c;
+		} else {
+			sum += (c << 8);
+		}
+		odd = !odd;
+		--n;
 	}
 
 	return *this;
@@ -52,6 +55,7 @@ inline Checksum& Checksum::add(const iovec& iov)
 
 inline Checksum& Checksum::add(uint16_t n)
 {
-	sum += htons(n);
+	n = htons(n);
+	add(&n, sizeof n);
 	return *this;
 }

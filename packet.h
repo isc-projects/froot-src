@@ -45,7 +45,9 @@ public:
 	int		getopt(int optname, uint32_t& val) const;
 
 	size_t		getmtu() const { return mtu; };
-	const ether_addr&	gethwaddr() const { return hwaddr; };
+	size_t		getmss() const { return std::min(size_t(1220), mtu); };
+
+	const ether_addr& gethwaddr() const { return hwaddr; };
 
 	void		rx_ring_enable(size_t frame_bits, size_t frame_nr);
 	int		rx_ring_next(Callback cb, int timeout = -1, void *userdata = nullptr);
