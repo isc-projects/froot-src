@@ -4,6 +4,7 @@
 #include <numeric>
 #include <vector>
 #include <thread>
+#include <random>
 #include <chrono>
 
 #include <sys/stat.h>
@@ -213,32 +214,23 @@ static void tcp_checksum(std::vector<iovec>& iov)
 	tcp.th_sum = crc.value();
 }
 
-static void send_tcp_synack(PacketSocket&s, const sockaddr_ll* addr, std::vector<iovec>& iov)
+static void send_tcp_flags(PacketSocket&s, const sockaddr_ll* addr, std::vector<iovec>& iov, uint8_t flags)
 {
-	// generate TCP outbound header from inbound header
-	auto& tcp = *reinterpret_cast<tcphdr*>(iov[1].iov_base);
+	thread_local auto rnd = std::mt19937(std::chrono::system_clock::now().time_since_epoch().count());
 
-	uint32_t seq = ntohl(tcp.th_seq);
-
-	tcp.th_seq = 0;			// TODO: pick random
-	tcp.th_ack = htonl(seq + 1);
-	tcp.th_flags = TH_SYN | TH_ACK;
-	tcp_checksum(iov);
-
-	send_ipv4(s, addr, iov);
-}
-
-static void send_tcp_ack(PacketSocket&s, const sockaddr_ll* addr, std::vector<iovec>& iov)
-{
 	// generate TCP outbound header from inbound header
 	auto& tcp = *reinterpret_cast<tcphdr*>(iov[1].iov_base);
 
 	uint32_t ack = ntohl(tcp.th_ack);
 	uint32_t seq = ntohl(tcp.th_seq);
 
+	if (flags == (TH_SYN + TH_ACK)) {
+		tcp.th_seq = rnd();
+	} else {
+		tcp.th_seq = ntohl(ack - 1);
+	}
 	tcp.th_ack = htonl(seq + 1);
-	tcp.th_seq = htonl(ack - 1);
-	tcp.th_flags = TH_ACK;
+	tcp.th_flags = flags;
 	tcp_checksum(iov);
 
 	send_ipv4(s, addr, iov);
@@ -254,7 +246,7 @@ static void send_tcp_data(PacketSocket&s, const sockaddr_ll* addr, std::vector<i
 
 	tcp.th_ack = htonl(seq + acked);
 	tcp.th_seq = htonl(ack);
-	tcp.th_flags = TH_ACK | TH_FIN;
+	tcp.th_flags = TH_ACK + TH_FIN;
 	tcp_checksum(iov);
 
 	send_ipv4(s, addr, iov);
@@ -299,20 +291,30 @@ void Server::handle_tcp(PacketSocket&s, ReadBuffer& in, const sockaddr_ll* addr,
 	}
 
 	// set TCP data offset at current position
-	tcp.th_off = (iov[1].iov_len >> 2);
+	tcp.th_off = out.position() >> 2;
 
 	// store the resulting TCP header in the list of iovecs.
 	iov.push_back(out);
 
 	// send the appropriate TCP response
-	if (tcp_in.th_flags & TH_SYN) {
-		send_tcp_synack(s, addr, iov);
-	} else if (tcp_in.th_flags & TH_FIN) {
-		send_tcp_ack(s, addr, iov);
+	uint8_t flags = tcp_in.th_flags;
+
+	if (flags == (TH_SYN + TH_ACK)) {
+		send_tcp_flags(s, addr, iov, TH_RST);
+	} else if (flags == TH_SYN) {
+		send_tcp_flags(s, addr, iov, TH_SYN + TH_ACK);
+	} else if ((flags == TH_FIN) || flags == (TH_FIN + TH_ACK)) {
+		send_tcp_flags(s, addr, iov, TH_FIN + TH_ACK);
 	} else {
-		if (in.available() < 2) return;		// TODO: send FIN / RST?
+		if (in.available() < 2) {
+			send_tcp_flags(s, addr, iov, TH_RST);
+			return;
+		}
 		auto len = ntohs(in.read<uint16_t>());
-		if (in.available() < len) return;	// TODO: send FIN / RST?
+		if (in.available() < len) {
+			send_tcp_flags(s, addr, iov, TH_RST);
+			return;
+		}
 
 		Context ctx(zone);
 		if (ctx.execute(in, iov, true)) {
