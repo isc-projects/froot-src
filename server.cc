@@ -25,33 +25,6 @@
 #include "timer.h"
 #include "util.h"
 
-void Server::loader_thread(std::string filename, bool compress)
-{
-	timespec mtim = { 0, 0 };
-	struct stat st;
-	bool first = true;
-
-	while (true) {
-		int res = ::stat(filename.c_str(), &st);
-		if (first || (res == 0 && !(st.st_mtim == mtim))) {
-			try {
-				zone.load(filename, compress);
-				mtim = st.st_mtim;
-			} catch (std::exception& e) {
-				std::cerr << "error: " << e.what() << std::endl;
-			}
-		}
-		first = false;
-		std::this_thread::sleep_for(std::chrono::seconds(1));
-	}
-}
-
-void Server::load(const std::string& filename, bool compress)
-{
-	auto t = std::thread(&Server::loader_thread, this, filename, compress);
-	t.detach();
-}
-
 static size_t payload_length(const std::vector<iovec>& iov)
 {
 	return std::accumulate(iov.cbegin() + 1, iov.cend(), 0U,
@@ -449,6 +422,8 @@ void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const 
 	}
 }
 
+//---------------------------------------------------------------------
+
 void Server::handle_arp(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr)
 {
 	ReadBuffer in(buffer, buflen);
@@ -506,6 +481,8 @@ void Server::handle_arp(PacketSocket& s, uint8_t* buffer, size_t buflen, const s
 	::sendmsg(s.fd, &msg, 0);
 }
 
+//---------------------------------------------------------------------
+
 void Server::handle_packet(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr, void* userdata)
 {
 	uint16_t ethertype = htons(addr->sll_protocol);
@@ -534,4 +511,33 @@ void Server::worker_thread(PacketSocket& s, in_addr _addr, uint16_t _port)
 	} catch (std::exception& e) {
 		std::cerr << "worker error: " << e.what() << std::endl;
 	}
+}
+
+//---------------------------------------------------------------------
+
+void Server::loader_thread(std::string filename, bool compress)
+{
+	timespec mtim = { 0, 0 };
+	struct stat st;
+	bool first = true;
+
+	while (true) {
+		int res = ::stat(filename.c_str(), &st);
+		if (first || (res == 0 && !(st.st_mtim == mtim))) {
+			try {
+				zone.load(filename, compress);
+				mtim = st.st_mtim;
+			} catch (std::exception& e) {
+				std::cerr << "error: " << e.what() << std::endl;
+			}
+		}
+		first = false;
+		std::this_thread::sleep_for(std::chrono::seconds(1));
+	}
+}
+
+void Server::load(const std::string& filename, bool compress)
+{
+	auto t = std::thread(&Server::loader_thread, this, filename, compress);
+	t.detach();
 }

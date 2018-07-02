@@ -251,11 +251,11 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out, bool tcp)
 	bool aa_bit = answer->authoritative();
 	bool tc_bit = false;
 
-	// handle truncation
 	size_t total_len = sizeof(dnshdr) + qdsize + answer->size();
 	if (tcp) {
 		(void) head.write<uint16_t>(htons(total_len));
 	} else if (total_len > bufsize) {
+		// handle truncation
 		tc_bit = true;
 		answer = Answer::empty;		// includes OPT RR
 	}
