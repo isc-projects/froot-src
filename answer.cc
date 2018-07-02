@@ -87,8 +87,9 @@ void Answer::dname_to_wire(ldns_buffer* lbuf, const ldns_rdf* name)
 	// not found - store the current position in the map, with an
 	// offset based on the assumed minimum question section size
 	uint16_t pos = ldns_buffer_position(lbuf);
-	if (pos < 16384) {
-		put_name_pointer(name, pos + 12 + fix_offset);
+	uint16_t real_pos = pos + 12 + fix_offset;
+	if (real_pos < (16384 - 255))  {	// room for question section
+		put_name_pointer(name, real_pos);
 	}
 
 	// chop the name in two, writing the left hand label
