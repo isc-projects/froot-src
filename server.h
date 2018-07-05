@@ -18,6 +18,7 @@ private:
 private:
 	void handle_udp(PacketSocket& s, ReadBuffer& in, const sockaddr_ll* addr, std::vector<iovec>& iov);
 	void handle_tcp(PacketSocket& s, ReadBuffer& in, const sockaddr_ll* addr, std::vector<iovec>& iov);
+	void handle_icmp(PacketSocket& s, ReadBuffer& in, const sockaddr_ll* addr, std::vector<iovec>& iov);
 
 	void handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr);
 	void handle_arp(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr);

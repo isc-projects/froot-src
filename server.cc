@@ -15,7 +15,7 @@
 #include <net/ethernet.h>
 #include <net/if_arp.h>
 #include <netinet/ip.h>
-#include <netinet/ip6.h>
+#include <netinet/ip_icmp.h>
 #include <netinet/udp.h>
 #include <netinet/tcp.h>
 
@@ -361,6 +361,39 @@ void Server::handle_tcp(PacketSocket&s, ReadBuffer& in, const sockaddr_ll* addr,
 	}
 }
 
+void Server::handle_icmp(PacketSocket&s, ReadBuffer& in, const sockaddr_ll* addr, std::vector<iovec>& iov)
+{
+	// read ICMP header
+	if (in.available() < sizeof(icmphdr)) return;
+	auto hdr = in.read<icmphdr>();
+
+	// we only answer pings
+	if (hdr.type != ICMP_ECHO) return;
+
+	// code 0 is the only valid one for echo
+	if (hdr.code != 0) return;
+
+	// use the copy of the header to generate the response
+	iov.push_back(iovec { &hdr, sizeof hdr });
+	hdr.type = ICMP_ECHOREPLY;
+	hdr.checksum = 0;
+
+	// start accumulating the checksum
+	Checksum crc;
+	crc.add(iov.back());
+
+	// use the remaining data in the read buffer as payload
+	size_t n = in.available();
+	auto p = const_cast<uint8_t*>(in.read<uint8_t>(n));
+	iov.push_back(iovec { p, n });
+
+	// update the checksum
+	crc.add(iov.back());
+	hdr.checksum = crc.value();
+
+	send_ipv4(s, addr, iov);
+}
+
 void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const sockaddr_ll* addr)
 {
 	// buffer for extracting data
@@ -415,10 +448,13 @@ void Server::handle_ipv4(PacketSocket& s, uint8_t* buffer, size_t buflen, const 
 
 	// dispatch to layer four handling
 
-	if (ip4_in.ip_p == IPPROTO_UDP) {
+	auto proto = ip4_in.ip_p;
+	if (proto == IPPROTO_UDP) {
 		handle_udp(s, in, addr, iov);
-	} else if (ip4_in.ip_p == IPPROTO_TCP) {
+	} else if (proto == IPPROTO_TCP) {
 		handle_tcp(s, in, addr, iov);
+	} else if (proto == IPPROTO_ICMP) {
+		handle_icmp(s, in, addr, iov);
 	}
 }
 
@@ -467,18 +503,8 @@ void Server::handle_arp(PacketSocket& s, uint8_t* buffer, size_t buflen, const s
 	out.write<ether_addr>(sha);
 	out.write<in_addr>(spa);
 
-	// construct response message descriptor
-	iovec iov(out);
-	msghdr msg;
-	msg.msg_name = reinterpret_cast<void*>(const_cast<sockaddr_ll*>(addr));
-	msg.msg_namelen = sizeof(sockaddr_ll);
-	msg.msg_control = nullptr;
-	msg.msg_controllen = 0;
-	msg.msg_flags = 0;
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-
-	::sendmsg(s.fd, &msg, 0);
+	auto iov = std::vector<iovec> { out };
+	sendmsg(s.fd, addr, iov, iov.size());
 }
 
 //---------------------------------------------------------------------
