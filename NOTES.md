@@ -63,7 +63,7 @@ to that variable's members will get written to the buffer.
 packet.cc, packet.h
 -------------------
 
-A low-level class proving access to an AF_PACKET raw socket under
+A low-level class proving access to an `AF_PACKET` raw socket under
 Linux with reads done using a memory-mapped `PACKET_RX_RING` to
 increase performance.
 
