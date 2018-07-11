@@ -9,25 +9,27 @@ endif
 INCS = $(shell pkg-config $(LDNSPKG) --cflags)
 LIBS = $(shell pkg-config $(LDNSPKG) --libs)
 
-CXXFLAGS = -O3 -g -std=c++14 -Wall -Werror -Wno-error=pragmas $(INCS)
+CXXFLAGS = -O0 -g -std=c++14 -Wall -Werror -Wno-error=pragmas $(INCS)
 LDFLAGS =
 
 BIN += lightbench
 COMMON_OBJS = context.o zone.o answer.o rrlist.o util.o
+NETSERVER_SRCS = $(wildcard netserver/*.cc)
+NETSERVER_OBJS = $(NETSERVER_SRCS:.cc=.o)
 LIBS += -lpthread -lresolv
 
 .PHONY:	all clean
 
 all: $(BIN)
 
-lightning:	main.o server.o packet.o $(COMMON_OBJS)
+lightning:	main.o server.o packet.o $(NETSERVER_OBJS) $(COMMON_OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
 lightbench:	 lightbench.o queryfile.o timer.o $(COMMON_OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
 clean:
-	$(RM) $(BIN) *.o
+	$(RM) $(BIN) *.o netserver/*.o
 
 .cc.s:
 	$(CXX) -S $^ $(CXXFLAGS) $(CPPFLAGS)

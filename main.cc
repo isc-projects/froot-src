@@ -3,6 +3,16 @@
 #include <thread>
 #include <vector>
 
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+#include "netserver/afpacket.h"
+#include "netserver/ipv4.h"
+#include "netserver/icmp.h"
+#include "netserver/arp.h"
+#include "netserver/udp.h"
+#include "netserver/tcp.h"
+
 #include "server.h"
 
 void thread_setcpu(std::thread& t, unsigned int n)
@@ -61,24 +71,36 @@ int app(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
+	DNSServer server;
+	server.load(zfname, compress);
+
 	// limit thread range
 	threads = std::min(threads, max_threads);
 	threads = std::max(1U, threads);
 
-	Server server;
-	server.load(zfname, compress);
-
 	std::vector<std::thread> workers(threads);
-	std::vector<PacketSocket> socks(threads);
 
 	for (auto i = 0U; i < threads; ++i) {
 
-		socks[i].open();
-		socks[i].bind(ifname);
-		socks[i].rx_ring_enable(11, 128);
+		workers[i] = std::thread([&]() {
+			Netserver_AFPacket raw(ifname);
+			Netserver_ARP arp(raw.gethwaddr(), host);
+			Netserver_ICMP icmp;
+			Netserver_IPv4 ipv4(host);
+			Netserver_UDP udp4;
+			Netserver_TCP tcp4;
 
-		workers[i] = std::thread(
-			&Server::worker_thread, &server, std::ref(socks[i]), host, port);
+			arp.attach(raw);
+			icmp.attach(raw);
+			ipv4.attach(raw);
+			udp4.attach(ipv4);
+			tcp4.attach(ipv4);
+			server.attach(udp4, port);
+			server.attach(tcp4, port);
+
+			raw.loop();
+		});
+
 		thread_setcpu(workers[i], i);
 	}
 
