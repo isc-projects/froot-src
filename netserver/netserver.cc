@@ -2,7 +2,7 @@
 
 void NetserverLayer::attach(NetserverLayer& layer, uint16_t protocol)
 {
-	layers[protocol] = &layer;
+	layer.layers[protocol] = this;
 }
 
 NetserverPacket::NetserverPacket(uint8_t* buf, size_t buflen, const sockaddr* addr, socklen_t addrlen)

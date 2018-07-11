@@ -2,7 +2,7 @@
 
 #include <cstdint>
 #include <vector>
-#include <array>
+#include <map>
 #include <sys/socket.h>
 
 #include "../buffer.h"
@@ -32,7 +32,7 @@ public:
 class NetserverLayer {
 
 protected:
-	std::array<const NetserverLayer*, 65536> layers = { nullptr };
+	std::map<uint16_t, const NetserverLayer*> layers;
 
 	bool registered(uint16_t protocol) const;
 	void dispatch(NetserverPacket& p, uint16_t proto) const;
@@ -61,15 +61,16 @@ public:
 
 inline bool NetserverLayer::registered(uint16_t protocol) const
 {
-	return layers[protocol] != nullptr;
+	return layers.find(protocol) != layers.end();
 }
 
 inline void NetserverLayer::dispatch(NetserverPacket& p, uint16_t protocol) const
 {
-	if (!layers[protocol]) return;
-
-	p.layers.push_back(this);
-	layers[protocol]->recv(p);
+	auto iter = layers.find(protocol);
+	if (iter != layers.end()) {
+		p.layers.push_back(this);
+		iter->second->recv(p);
+	}
 }
 
 inline void NetserverLayer::send_up(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen, int current) const

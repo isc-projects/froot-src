@@ -8,6 +8,15 @@
 #include "checksum.h"
 #include "udp.h"
 
+static size_t payload_length(const std::vector<iovec>& iov)
+{
+	return std::accumulate(iov.cbegin() + 1, iov.cend(), 0U,
+		[](size_t a, const iovec& b) {
+			return a + b.iov_len;
+		}
+	);
+}
+
 void Netserver_UDP::recv(NetserverPacket& p) const
 {
 	auto& in = p.readbuf;
@@ -35,4 +44,12 @@ void Netserver_UDP::recv(NetserverPacket& p) const
 	p.push(iovec { &udp_out, sizeof udp_out });
 
 	dispatch(p, proto);
+}
+
+void Netserver_UDP::send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen, int current) const
+{
+	auto& udp_out = *reinterpret_cast<udphdr*>(iovs[1].iov_base);	// FIXME
+	udp_out.uh_ulen = htons(payload_length(iovs));
+
+	send_up(p, iovs, iovlen, current);
 }

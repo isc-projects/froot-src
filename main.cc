@@ -83,16 +83,16 @@ int app(int argc, char *argv[])
 	for (auto i = 0U; i < threads; ++i) {
 
 		workers[i] = std::thread([&]() {
-			Netserver_AFPacket raw(ifname);
-			Netserver_ARP arp(raw.gethwaddr(), host);
-			Netserver_ICMP icmp;
-			Netserver_IPv4 ipv4(host);
-			Netserver_UDP udp4;
-			Netserver_TCP tcp4;
+			auto raw = Netserver_AFPacket(ifname);
+			auto arp = Netserver_ARP(raw.gethwaddr(), host);
+			auto icmp = Netserver_ICMP();
+			auto ipv4 = Netserver_IPv4(host);
+			auto udp4 = Netserver_UDP();
+			auto tcp4 = Netserver_TCP();
 
 			arp.attach(raw);
-			icmp.attach(raw);
 			ipv4.attach(raw);
+			icmp.attach(ipv4);
 			udp4.attach(ipv4);
 			tcp4.attach(ipv4);
 			server.attach(udp4, port);

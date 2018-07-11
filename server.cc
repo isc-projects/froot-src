@@ -3,6 +3,7 @@
 
 #include <sys/stat.h>
 
+#include "netserver/tcp.h"
 #include "server.h"
 #include "context.h"
 #include "timer.h"
@@ -12,6 +13,13 @@
 
 void DNSServer::recv(NetserverPacket& p) const
 {
+	auto *up = p.layers.back();
+	bool tcp = (dynamic_cast<const Netserver_TCP*>(up) != nullptr);
+
+	Context ctx(zone);
+	if (ctx.execute(p.readbuf, p.iovs, tcp)) {
+		send_up(p, p.layers.size());
+	}
 }
 
 //---------------------------------------------------------------------

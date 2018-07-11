@@ -9,17 +9,6 @@
 #include "ipv4.h"
 #include "checksum.h"
 
-#if 0
-static size_t payload_length(const std::vector<iovec>& iov)
-{
-	return std::accumulate(iov.cbegin() + 1, iov.cend(), 0U,
-		[](size_t a, const iovec& b) {
-			return a + b.iov_len;
-		}
-	);
-}
-#endif
-
 void Netserver_IPv4::send_fragment(NetserverPacket& p, int current,
 	uint16_t offset, uint16_t chunk,
 	const std::vector<iovec>& iovs, size_t iovlen, bool mf) const

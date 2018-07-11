@@ -36,5 +36,5 @@ void Netserver_ICMP::recv(NetserverPacket& p) const
 	crc.add(iov.back());
 	hdr.checksum = crc.value();
 
-	send_up(p, p.layers.size());
+	send(p);
 }

@@ -15,6 +15,7 @@ public:
 	}
 
 public:
-	void recv(NetserverPacket &p) const;
+	void recv(NetserverPacket& p) const;
+	void send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen, int current) const;
 
 };
