@@ -46,7 +46,7 @@ static void tcp_checksum(std::vector<iovec>& iov)
 	tcp.th_sum = crc.value();
 }
 
-void Netserver_TCP::send_flags(NetserverPacket& p, int current, uint8_t flags) const
+void Netserver_TCP::send_flags(NetserverPacket& p, uint8_t flags) const
 {
 	thread_local auto rnd = std::mt19937(std::chrono::system_clock::now().time_since_epoch().count());
 
@@ -65,13 +65,13 @@ void Netserver_TCP::send_flags(NetserverPacket& p, int current, uint8_t flags) c
 	tcp.th_flags = flags;
 	tcp_checksum(p.iovs);
 
-	send_up(p, current);
+	send_up(p);
 }
 
 //
 // assumes that iov[0] contains the IP header and iov[1] contains the TCP header
 //
-void Netserver_TCP::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen, int current) const
+void Netserver_TCP::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen) const
 {
 	uint16_t acked = p.readbuf.position() - sizeof(ip) - sizeof(tcphdr);	// FIXME
 
@@ -123,9 +123,11 @@ void Netserver_TCP::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, 
 			auto base = reinterpret_cast<uint8_t*>(vec.iov_base);
 			iter = iovs.insert(iter, iovec { base + vec.iov_len, len - vec.iov_len});
 
-			// send segment
+			// send segment, remembering current layer ready for next segment
 			tcp_checksum(out);
-			send_up(p, out, out.size(), current);
+			auto tmp = p.current;
+			send_up(p, out, out.size());
+			p.current = tmp;
 
 			// remove the already transmitted iovecs (excluding the IP and TCP headers)
 			iter = iovs.erase(iovs.begin() + 2, iter);
@@ -143,7 +145,7 @@ void Netserver_TCP::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, 
 	tcp.th_flags |= TH_FIN;
 
 	tcp_checksum(iovs);
-	send_up(p, iovs, iovs.size(), current);
+	send_up(p, iovs, iovs.size());
 }
 
 void Netserver_TCP::recv(NetserverPacket& p) const
@@ -196,24 +198,22 @@ void Netserver_TCP::recv(NetserverPacket& p) const
 	// send the appropriate TCP response
 	uint8_t flags = tcp_in.th_flags;
 
-	int current = p.layers.size() - 1;
-
 	if (flags == (TH_SYN + TH_ACK)) {
-		send_flags(p, current, TH_RST);
+		send_flags(p, TH_RST);
 	} else if (flags == TH_SYN) {
-		send_flags(p, current, TH_SYN + TH_ACK);
+		send_flags(p, TH_SYN + TH_ACK);
 	} else if ((flags == TH_FIN) || flags == (TH_FIN + TH_ACK)) {
-		send_flags(p, current, TH_FIN + TH_ACK);
+		send_flags(p, TH_FIN + TH_ACK);
 	} else if (flags == TH_ACK) {
 		// ignore
 	} else {
 		if (in.available() < 2) {
-			send_flags(p, current, TH_RST);
+			send_flags(p, TH_RST);
 			return;
 		}
 		auto len = ntohs(in.read<uint16_t>());
 		if (in.available() < len) {
-			send_flags(p, current, TH_RST);
+			send_flags(p, TH_RST);
 			return;
 		}
 

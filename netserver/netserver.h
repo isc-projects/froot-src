@@ -9,7 +9,8 @@
 
 class NetserverLayer;
 
-typedef std::vector<const NetserverLayer*> NetserverLayers;
+typedef std::pair<const NetserverLayer*, void *> NetserverState;
+typedef std::vector<NetserverState> NetserverLayers;
 
 struct NetserverPacket {
 
@@ -20,11 +21,12 @@ public:
 
 	NetserverLayers			layers;
 	std::vector<iovec>		iovs;
+	int8_t				current = 0;
 
 public:
 	NetserverPacket(uint8_t* buf, size_t buflen, const sockaddr* addr, socklen_t addrlen);
 
-	void push(const iovec iov) {
+	void push(const iovec& iov) {
 		iovs.push_back(iov);
 	}
 };
@@ -35,18 +37,17 @@ protected:
 	std::map<uint16_t, const NetserverLayer*> layers;
 
 	bool registered(uint16_t protocol) const;
-	void dispatch(NetserverPacket& p, uint16_t proto) const;
+	void dispatch(NetserverPacket& p, uint16_t proto, void *data = nullptr) const;
 
-	void send_up(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen, int current) const;
-	void send_up(NetserverPacket& p, int current) const;
+	void send_up(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen) const;
+	void send_up(NetserverPacket& p) const;
 
 public:
 	void attach(NetserverLayer& layer, uint16_t proto);
 
 public:
 	virtual void recv(NetserverPacket& p) const = 0;
-	virtual void send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen, int current) const;
-	virtual void send(NetserverPacket& p, int current) const;
+	virtual void send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen) const;
 	virtual void send(NetserverPacket& p) const;
 };
 
@@ -64,37 +65,35 @@ inline bool NetserverLayer::registered(uint16_t protocol) const
 	return layers.find(protocol) != layers.end();
 }
 
-inline void NetserverLayer::dispatch(NetserverPacket& p, uint16_t protocol) const
+inline void NetserverLayer::dispatch(NetserverPacket& p, uint16_t protocol, void *data) const
 {
 	auto iter = layers.find(protocol);
 	if (iter != layers.end()) {
-		p.layers.push_back(this);
+		p.current++;
+		p.layers.push_back(NetserverState { this, data });
 		iter->second->recv(p);
 	}
 }
 
-inline void NetserverLayer::send_up(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen, int current) const
+inline void NetserverLayer::send_up(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen) const
 {
-	--current;
+	auto current = --p.current;
 	assert(current >= 0);
-	p.layers[current]->send(p, iovs, iovlen, current);
+	auto state = p.layers[current];
+	state.first->send(p, iovs, iovlen);
 }
 
-inline void NetserverLayer::send_up(NetserverPacket& p, int current) const
+inline void NetserverLayer::send_up(NetserverPacket& p) const
 {
-	send_up(p, p.iovs, p.iovs.size(), current);
+	send_up(p, p.iovs, p.iovs.size());
 }
 
 // default send methods just push the data up a layer
-inline void NetserverLayer::send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen, int current) const
+inline void NetserverLayer::send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen) const
 {
-	send_up(p, iovs, iovlen, current);
-}
-
-inline void NetserverLayer::send(NetserverPacket& p, int current) const {
-	send(p, p.iovs, p.iovs.size(), current);
+	send_up(p, iovs, iovlen);
 }
 
 inline void NetserverLayer::send(NetserverPacket& p) const {
-	send(p, p.iovs, p.iovs.size(), p.layers.size());
+	send(p, p.iovs, p.iovs.size());
 }

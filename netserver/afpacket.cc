@@ -114,7 +114,7 @@ void Netserver_AFPacket::recv(NetserverPacket& p) const
 	dispatch(p, ethertype);
 }
 
-void Netserver_AFPacket::send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen, int current) const
+void Netserver_AFPacket::send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen) const
 {
 	msghdr msg;
 

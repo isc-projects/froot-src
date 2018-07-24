@@ -31,10 +31,10 @@ private:
 	void			rxring(size_t frame_bits, size_t frame_nr);
 
 private:
-	void			recv(NetserverPacket& p) const;
+	void			recv(NetserverPacket& p) const override;
 
 public:
-	void			send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen, int current) const;
+	void			send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen) const override;
 
 public:
 	Netserver_AFPacket(const std::string& ifname);

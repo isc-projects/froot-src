@@ -170,9 +170,15 @@ iovec Answer::data_offset_by(uint16_t offset, uint8_t* out) const
 	// adjust offset to account for excess
 	offset -= fix_offset;
 
-	// copy buffer and adjust compression pointers
-	::memcpy(out, buf, _size);
+	// copy buffer
+	auto n = _size;
+	auto p = out;
+	auto q = buf;
+	while (n--) {
+		*p++ = *q++;
+	}
 
+	// adjust compression pointers
 	for (auto n: c_offsets) {
 		auto& p = *reinterpret_cast<uint16_t*>(out + n);
 		p = htons(ntohs(p) + offset);

@@ -14,6 +14,6 @@ public:
 	}
 
 public:
-	void recv(NetserverPacket &p) const;
+	void recv(NetserverPacket &p) const override;
 
 };

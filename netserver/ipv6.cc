@@ -4,11 +4,12 @@
 #include <chrono>
 
 #include <arpa/inet.h>
-#include <netinet/ip.h>
+#include <netinet/ip6.h>
 
-#include "ipv4.h"
+#include "ipv6.h"
 #include "checksum.h"
 
+#if 0
 void Netserver_IPv4::send_fragment(NetserverPacket& p,
 	uint16_t offset, uint16_t chunk,
 	const std::vector<iovec>& iovs, size_t iovlen, bool mf) const
@@ -22,7 +23,13 @@ void Netserver_IPv4::send_fragment(NetserverPacket& p,
 
 	send_up(p, iovs, iovlen);
 }
+#endif
 
+void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen) const
+{
+}
+
+#if 0
 void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen) const
 {
 	// thread local RNG for generating IP IDs
@@ -70,10 +77,10 @@ void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 			// assignment necessary in case old iterator is invalidated
 			iter = iovs.insert(iter, iovec { base + vec.iov_len, len - vec.iov_len});
 
-			// send fragment (with MF bit), saving layer offset
+			// send fragment (with MF bit), remembering which layer we're on
 			auto tmp = p.current;
 			send_fragment(p, offset, chunk, iovs, iovs.size(), false);
-			p.current = tmp;
+			p.current = tmp;;
 
 			// remove the already transmitted iovecs (excluding the IP header)
 			iter = iovs.erase(iovs.begin() + 1, iter);
@@ -87,57 +94,67 @@ void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 	// send final fragment
 	send_fragment(p, offset, chunk, iovs, iovs.size(), false);
 }
+#endif
 
-void Netserver_IPv4::recv(NetserverPacket& p) const
+void Netserver_IPv6::recv(NetserverPacket& p) const
 {
 	ReadBuffer& in = p.readbuf;
 
 	// extract L3 header
 	auto version = (in[0] >> 4) & 0x0f;
-	if (version != 4) return;
+	if (version != 6) return;
 
-	// check IP header length
-	auto ihl = 4U * (in[0] & 0x0f);
+	// check IPv6 header length
+	auto ihl = sizeof(ip6_hdr);
 	if (in.available() < ihl) return;
 
-	// consume IPv4 header, skipping IP options
-	auto& ip4_in = in.read<struct ip>();
-	if (ihl > sizeof ip4_in) {
-		(void) in.read<uint8_t>(ihl - sizeof ip4_in);
-	}
+	// read IPv6 header
+	auto& ip6_in = in.read<ip6_hdr>();
 
 	// check it's a registered protocol
-	if (!registered(ip4_in.ip_p)) return;
+	if (!registered(ip6_in.ip6_nxt)) return;
 
 	// check if it's for us
-	if (::memcmp(&ip4_in.ip_dst, &addr, sizeof addr) != 0) return;
+	if (::memcmp(&ip6_in.ip6_dst, &addr, sizeof addr) != 0) return;
 
 	// hack for broken AF_PACKET size - recreate the buffer
 	// based on the IP header specified length instead of what
 	// was returned by the AF_PACKET layer
 	if (in.size() == 46) {
 		size_t pos = in.position();
-		size_t len = ntohs(ip4_in.ip_len);
+		size_t len = ntohs(ip6_in.ip6_plen);
 		if (len < 46) {
 			in = ReadBuffer(&in[0], len);
 			(void) in.read<uint8_t>(pos);
 		}
 	}
 
-	// IPv4 header creation
-	ip ip4_out;
-	ip4_out.ip_v = 4;
-	ip4_out.ip_hl = (sizeof ip4_out) / 4;
-	ip4_out.ip_tos = 0;
-	ip4_out.ip_len = 0;
-	ip4_out.ip_off = 0;
-	ip4_out.ip_ttl = 31;
-	ip4_out.ip_p = ip4_in.ip_p;
-	ip4_out.ip_sum = 0;
-	ip4_out.ip_src = ip4_in.ip_dst;
-	ip4_out.ip_dst = ip4_in.ip_src;
-	p.push(iovec { &ip4_out, sizeof ip4_out } );
+	// IPv6 header creation
+	ip6_hdr ip6_out;
+	ip6_out.ip6_flow = ip6_in.ip6_flow;
+	ip6_out.ip6_plen = 0;
+	ip6_out.ip6_nxt = ip6_in.ip6_nxt;
+	ip6_out.ip6_hlim = 31;
+	ip6_out.ip6_src = ip6_in.ip6_dst;
+	ip6_out.ip6_dst = ip6_in.ip6_src;
+	p.push(iovec { &ip6_out, sizeof ip6_out } );
 
 	// dispatch to layer four handling
-	dispatch(p, ip4_in.ip_p);
+	dispatch(p, ip6_in.ip6_nxt);
+}
+
+Netserver_IPv6::Netserver_IPv6(const ether_addr& ether, const in6_addr& addr)
+	: addr(addr)
+{
+	memset(&link_local, 0, sizeof link_local);
+	link_local.s6_addr[0] = 0xfe;
+	link_local.s6_addr[1] = 0x80;
+	link_local.s6_addr[8] = (ether.ether_addr_octet[0] ^ 0x01) | 0x02;
+	link_local.s6_addr[9] = ether.ether_addr_octet[1];
+	link_local.s6_addr[10] = ether.ether_addr_octet[2];
+	link_local.s6_addr[11] = 0xff;
+	link_local.s6_addr[12] = 0xfe;
+	link_local.s6_addr[13] = ether.ether_addr_octet[3];
+	link_local.s6_addr[14] = ether.ether_addr_octet[4];
+	link_local.s6_addr[15] = ether.ether_addr_octet[5];
 }

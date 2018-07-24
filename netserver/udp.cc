@@ -46,10 +46,10 @@ void Netserver_UDP::recv(NetserverPacket& p) const
 	dispatch(p, proto);
 }
 
-void Netserver_UDP::send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen, int current) const
+void Netserver_UDP::send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen) const
 {
 	auto& udp_out = *reinterpret_cast<udphdr*>(iovs[1].iov_base);	// FIXME
 	udp_out.uh_ulen = htons(payload_length(iovs));
 
-	send_up(p, iovs, iovlen, current);
+	send_up(p, iovs, iovlen);
 }

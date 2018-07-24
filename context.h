@@ -19,9 +19,9 @@ private:
 	const Answer* perform_lookup();
 
 private:
-	uint8_t			_head_buf[512];
-	uint8_t			_len_buf[2];
+	//uint8_t			_len_buf[2];
 	uint8_t			_an_buf[4096];
+	uint8_t			_head_buf[512];
 
 	WriteBuffer		head { _head_buf, sizeof(_head_buf) } ;
 

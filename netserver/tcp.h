@@ -8,7 +8,7 @@
 class Netserver_TCP : public NetserverLayer {
 
 protected:
-	void send_flags(NetserverPacket& p, int current, uint8_t flags) const;
+	void send_flags(NetserverPacket& p, uint8_t flags) const;
 
 public:
 	void attach(NetserverLayer& parent) {
@@ -16,7 +16,7 @@ public:
 	}
 
 public:
-	void recv(NetserverPacket& p) const;
-	void send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen, int current) const;
+	void recv(NetserverPacket& p) const override;
+	void send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen) const override;
 
 };

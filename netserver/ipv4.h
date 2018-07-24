@@ -8,7 +8,7 @@ class Netserver_IPv4 : public NetserverLayer {
 
 private:
 	const in_addr& addr;
-	void send_fragment(NetserverPacket& p, int current, uint16_t offset, uint16_t chunk, const std::vector<iovec>& iov, size_t iovlen, bool mf) const;
+	void send_fragment(NetserverPacket& p, uint16_t offset, uint16_t chunk, const std::vector<iovec>& iov, size_t iovlen, bool mf) const;
 	
 public:
 	Netserver_IPv4(const in_addr& addr) : addr(addr) { };
@@ -18,7 +18,7 @@ public:
 	}
 
 public:
-	void recv(NetserverPacket &p) const;
-	void send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen, int current) const;
+	void recv(NetserverPacket &p) const override;
+	void send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen) const override;
 
 };
