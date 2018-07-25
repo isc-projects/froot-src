@@ -22,6 +22,7 @@ private:
 	uint32_t		rx_current = 0;
 	ptrdiff_t		ll_offset;
 
+	int			ifindex;
 	size_t			mtu;
 	ether_addr		hwaddr;
 

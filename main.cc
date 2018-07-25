@@ -8,7 +8,9 @@
 
 #include "netserver/afpacket.h"
 #include "netserver/ipv4.h"
+#include "netserver/ipv6.h"
 #include "netserver/icmp.h"
+#include "netserver/icmpv6.h"
 #include "netserver/arp.h"
 #include "netserver/udp.h"
 #include "netserver/tcp.h"
@@ -85,18 +87,32 @@ int app(int argc, char *argv[])
 		workers[i] = std::thread([&]() {
 			auto raw = Netserver_AFPacket(ifname);
 			auto arp = Netserver_ARP(raw.gethwaddr(), host);
-			auto icmp = Netserver_ICMP();
+
 			auto ipv4 = Netserver_IPv4(host);
-			auto udp4 = Netserver_UDP();
-			auto tcp4 = Netserver_TCP();
+			auto ipv6 = Netserver_IPv6(raw.gethwaddr());
+
+			auto icmp4 = Netserver_ICMP();
+			auto icmp6 = Netserver_ICMPv6();
+
+			auto udp = Netserver_UDP();
+			auto tcp = Netserver_TCP();
+
+			// auto icmp6 = Netserver_ICMPv6();
 
 			arp.attach(raw);
 			ipv4.attach(raw);
-			icmp.attach(ipv4);
-			udp4.attach(ipv4);
-			tcp4.attach(ipv4);
-			server.attach(udp4, port);
-			server.attach(tcp4, port);
+			ipv6.attach(raw);
+
+			icmp4.attach(ipv4);
+			icmp6.attach(ipv6);
+
+			udp.attach(ipv4);
+			udp.attach(ipv6);
+			tcp.attach(ipv4);
+			tcp.attach(ipv6);
+
+			server.attach(udp, port);
+			server.attach(tcp, port);
 
 			raw.loop();
 		});

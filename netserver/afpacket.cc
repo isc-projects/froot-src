@@ -51,14 +51,21 @@ void Netserver_AFPacket::bind(const std::string& ifname)
 	if (::ioctl(fd, SIOCGIFINDEX, &ifr) < 0) {
 		throw_errno("ioctl(SIOCGIFINDEX)");
 	}
+	ifindex = ifr.ifr_ifindex;
 
 	// bind the AF_PACKET socket to the specified interface
 	sockaddr_ll saddr = { 0, };
 	saddr.sll_family = AF_PACKET;
-	saddr.sll_ifindex = ifr.ifr_ifindex;
+	saddr.sll_ifindex = ifindex;
 
 	if (::bind(fd, reinterpret_cast<sockaddr *>(&saddr), sizeof(saddr)) < 0) {
 		throw_errno("bind(AF_PACKET)");
+	}
+
+	// enable multicast reception
+	packet_mreq mreq = { ifindex, PACKET_MR_ALLMULTI, 0 };
+	if (setsockopt(fd, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &mreq, sizeof mreq) < 0) {
+		throw_errno("setsockopt(PACKET_ADD_MEMBERSHIP)");
 	}
 
 	// set the AF_PACKET socket's fanout mode

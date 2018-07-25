@@ -1,5 +1,7 @@
+#include <iostream>
 #include <cstring>
 #include <vector>
+#include <algorithm>
 #include <random>
 #include <chrono>
 
@@ -8,6 +10,14 @@
 
 #include "ipv6.h"
 #include "checksum.h"
+
+#if 0
+static std::ostream& operator<<(std::ostream& os, const in6_addr& addr)
+{
+	thread_local char buf[INET6_ADDRSTRLEN];
+	return os << inet_ntop(AF_INET6, &addr, buf, sizeof buf);
+}
+#endif
 
 #if 0
 void Netserver_IPv4::send_fragment(NetserverPacket& p,
@@ -25,14 +35,27 @@ void Netserver_IPv4::send_fragment(NetserverPacket& p,
 }
 #endif
 
+static size_t payload_length(const std::vector<iovec>& iov)
+{
+	return std::accumulate(iov.cbegin() + 1, iov.cend(), 0U,
+		[](size_t a, const iovec& b) {
+			return a + b.iov_len;
+		}
+	);
+}
+
 void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen) const
 {
+	auto& ip6_out = *reinterpret_cast<ip6_hdr*>(iovs_in[0].iov_base);	// FIXME
+	ip6_out.ip6_plen = htons(payload_length(iovs_in));
+
+	send_up(p, iovs_in, iovlen);
 }
 
 #if 0
-void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen) const
+void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen) const
 {
-	// thread local RNG for generating IP IDs
+	// thread local RNG for generating IPv6 IDs
 	thread_local auto rnd = std::mt19937(std::chrono::system_clock::now().time_since_epoch().count() + 1);
 
 	// copy vectors because we're going to modify them
@@ -96,6 +119,31 @@ void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 }
 #endif
 
+static bool match_solicited(const std::vector<in6_addr>& list, const in6_addr& addr)
+{
+	static const in6_addr solicit_prefix = { 0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0xff, 0, 0, 0 };
+
+	if (::memcmp(&addr, &solicit_prefix, 13) != 0) return false;
+
+	return std::any_of(list.cbegin(), list.cend(), [&](const in6_addr& cmp) {
+		auto* p = reinterpret_cast<const uint8_t*>(&addr);
+		auto* q = reinterpret_cast<const uint8_t*>(&cmp);
+		return ::memcmp(p + 13, q + 13, 3) == 0;
+	});
+}
+
+static bool match_exact(const std::vector<in6_addr>& list, const in6_addr& addr)
+{
+	return std::any_of(list.cbegin(), list.cend(), [&](const in6_addr& cmp) {
+		return ::memcmp(&addr, &cmp, sizeof addr) == 0;
+	});
+}
+
+bool Netserver_IPv6::match(const in6_addr& in) const
+{
+	return match_exact(addr, in) || match_solicited(addr, in);
+}
+
 void Netserver_IPv6::recv(NetserverPacket& p) const
 {
 	ReadBuffer& in = p.readbuf;
@@ -112,10 +160,11 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 	auto& ip6_in = in.read<ip6_hdr>();
 
 	// check it's a registered protocol
-	if (!registered(ip6_in.ip6_nxt)) return;
+	auto next = ip6_in.ip6_nxt;
+	if (!registered(next)) return;
 
 	// check if it's for us
-	if (::memcmp(&ip6_in.ip6_dst, &addr, sizeof addr) != 0) return;
+	if (!match(ip6_in.ip6_dst)) return;
 
 	// hack for broken AF_PACKET size - recreate the buffer
 	// based on the IP header specified length instead of what
@@ -133,28 +182,24 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 	ip6_hdr ip6_out;
 	ip6_out.ip6_flow = ip6_in.ip6_flow;
 	ip6_out.ip6_plen = 0;
-	ip6_out.ip6_nxt = ip6_in.ip6_nxt;
+	ip6_out.ip6_nxt = next;
 	ip6_out.ip6_hlim = 31;
 	ip6_out.ip6_src = ip6_in.ip6_dst;
 	ip6_out.ip6_dst = ip6_in.ip6_src;
 	p.push(iovec { &ip6_out, sizeof ip6_out } );
 
 	// dispatch to layer four handling
-	dispatch(p, ip6_in.ip6_nxt);
+	dispatch(p, next);
 }
 
-Netserver_IPv6::Netserver_IPv6(const ether_addr& ether, const in6_addr& addr)
-	: addr(addr)
+Netserver_IPv6::Netserver_IPv6(const ether_addr& ether)
 {
-	memset(&link_local, 0, sizeof link_local);
-	link_local.s6_addr[0] = 0xfe;
-	link_local.s6_addr[1] = 0x80;
-	link_local.s6_addr[8] = (ether.ether_addr_octet[0] ^ 0x01) | 0x02;
+	in6_addr link_local = { 0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xfe, 0, 0, 0 };
+	link_local.s6_addr[8] = ether.ether_addr_octet[0] ^ 0x02;
 	link_local.s6_addr[9] = ether.ether_addr_octet[1];
 	link_local.s6_addr[10] = ether.ether_addr_octet[2];
-	link_local.s6_addr[11] = 0xff;
-	link_local.s6_addr[12] = 0xfe;
 	link_local.s6_addr[13] = ether.ether_addr_octet[3];
 	link_local.s6_addr[14] = ether.ether_addr_octet[4];
 	link_local.s6_addr[15] = ether.ether_addr_octet[5];
+	addr.push_back(link_local);
 }

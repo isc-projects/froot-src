@@ -125,9 +125,9 @@ void Netserver_TCP::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, 
 
 			// send segment, remembering current layer ready for next segment
 			tcp_checksum(out);
-			auto tmp = p.current;
+			auto current = p.current;
 			send_up(p, out, out.size());
-			p.current = tmp;
+			p.current = current;
 
 			// remove the already transmitted iovecs (excluding the IP and TCP headers)
 			iter = iovs.erase(iovs.begin() + 2, iter);

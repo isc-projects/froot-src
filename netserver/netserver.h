@@ -5,6 +5,7 @@
 #include <map>
 #include <sys/socket.h>
 
+#include "checksum.h"
 #include "../buffer.h"
 
 class NetserverLayer;
@@ -16,6 +17,7 @@ struct NetserverPacket {
 
 public:
 	ReadBuffer			readbuf;
+	Checksum			crc;
 	const sockaddr*			addr = nullptr;
 	socklen_t			addrlen = 0;
 

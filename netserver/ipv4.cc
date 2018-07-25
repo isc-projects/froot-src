@@ -20,7 +20,12 @@ void Netserver_IPv4::send_fragment(NetserverPacket& p,
 	ip.ip_sum = 0;
 	ip.ip_sum = Checksum().add(&ip, sizeof ip).value();
 
+	// send the fragment, but reset the current layer after if there's MF
+	auto current = p.current;
 	send_up(p, iovs, iovlen);
+	if (mf) {
+		p.current = current;
+	}
 }
 
 void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen) const
@@ -70,10 +75,8 @@ void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 			// assignment necessary in case old iterator is invalidated
 			iter = iovs.insert(iter, iovec { base + vec.iov_len, len - vec.iov_len});
 
-			// send fragment (with MF bit), saving layer offset
-			auto tmp = p.current;
+			// send fragment (with MF bit)
 			send_fragment(p, offset, chunk, iovs, iovs.size(), false);
-			p.current = tmp;
 
 			// remove the already transmitted iovecs (excluding the IP header)
 			iter = iovs.erase(iovs.begin() + 1, iter);
