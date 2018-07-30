@@ -85,6 +85,7 @@ int app(int argc, char *argv[])
 	for (auto i = 0U; i < threads; ++i) {
 
 		workers[i] = std::thread([&]() {
+
 			auto raw = Netserver_AFPacket(ifname);
 			auto arp = Netserver_ARP(raw.gethwaddr(), host);
 
@@ -92,12 +93,10 @@ int app(int argc, char *argv[])
 			auto ipv6 = Netserver_IPv6(raw.gethwaddr());
 
 			auto icmp4 = Netserver_ICMP();
-			auto icmp6 = Netserver_ICMPv6();
+			auto icmp6 = Netserver_ICMPv6(raw.gethwaddr());
 
 			auto udp = Netserver_UDP();
 			auto tcp = Netserver_TCP();
-
-			// auto icmp6 = Netserver_ICMPv6();
 
 			arp.attach(raw);
 			ipv4.attach(raw);
@@ -108,6 +107,7 @@ int app(int argc, char *argv[])
 
 			udp.attach(ipv4);
 			udp.attach(ipv6);
+
 			tcp.attach(ipv4);
 			tcp.attach(ipv6);
 

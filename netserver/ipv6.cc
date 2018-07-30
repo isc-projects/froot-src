@@ -11,13 +11,11 @@
 #include "ipv6.h"
 #include "checksum.h"
 
-#if 0
 static std::ostream& operator<<(std::ostream& os, const in6_addr& addr)
 {
 	thread_local char buf[INET6_ADDRSTRLEN];
 	return os << inet_ntop(AF_INET6, &addr, buf, sizeof buf);
 }
-#endif
 
 #if 0
 void Netserver_IPv4::send_fragment(NetserverPacket& p,
@@ -144,6 +142,38 @@ bool Netserver_IPv6::match(const in6_addr& in) const
 	return match_exact(addr, in) || match_solicited(addr, in);
 }
 
+static uint8_t skip_extension_headers(NetserverPacket& p, uint8_t next)
+{
+	// we don't know how to handle receipt of IPv6 fragments
+	if (next == IPPROTO_FRAGMENT) {
+		return IPPROTO_NONE;
+	}
+
+	// recognized IPv6 extension headers
+	if (next != IPPROTO_HOPOPTS &&
+	    next != IPPROTO_DSTOPTS &&
+	    next != IPPROTO_ROUTING &&
+	    next != IPPROTO_MH)
+	{
+		return next;
+	}
+
+	// read the extension header and skip the contents
+	ReadBuffer& in = p.readbuf;
+	if (in.available() < 2) {
+		return IPPROTO_NONE;
+	}
+	next = in.read<uint8_t>();
+	auto optlen = in.read<uint8_t>() * 8U + 6U;
+	if (in.available() < optlen) {
+		return IPPROTO_NONE;
+	}
+	(void) in.read<uint8_t>(optlen);
+
+	// pass back to the main parser
+	return next;
+}
+
 void Netserver_IPv6::recv(NetserverPacket& p) const
 {
 	ReadBuffer& in = p.readbuf;
@@ -159,13 +189,6 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 	// read IPv6 header
 	auto& ip6_in = in.read<ip6_hdr>();
 
-	// check it's a registered protocol
-	auto next = ip6_in.ip6_nxt;
-	if (!registered(next)) return;
-
-	// check if it's for us
-	if (!match(ip6_in.ip6_dst)) return;
-
 	// hack for broken AF_PACKET size - recreate the buffer
 	// based on the IP header specified length instead of what
 	// was returned by the AF_PACKET layer
@@ -178,15 +201,38 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 		}
 	}
 
+	// check if it's for us
+	if (!match(ip6_in.ip6_dst)) return;
+
+	// skip over any extension headers
+	auto next = skip_extension_headers(p, ip6_in.ip6_nxt);
+	if (next == IPPROTO_NONE) {
+		return;
+	}
+
+	// ignore if the next protocol isn't registered
+	if (!registered(next)) return;
+
 	// IPv6 header creation
 	ip6_hdr ip6_out;
 	ip6_out.ip6_flow = ip6_in.ip6_flow;
 	ip6_out.ip6_plen = 0;
 	ip6_out.ip6_nxt = next;
-	ip6_out.ip6_hlim = 31;
-	ip6_out.ip6_src = ip6_in.ip6_dst;
+	ip6_out.ip6_hlim = 255;
+
+	// don't send from multicast addresses
+	if (ip6_in.ip6_dst.s6_addr[0] == 0xff) {
+		ip6_out.ip6_src = addr[0];
+	} else {
+		ip6_out.ip6_src = ip6_in.ip6_dst;
+	}
 	ip6_out.ip6_dst = ip6_in.ip6_src;
 	p.push(iovec { &ip6_out, sizeof ip6_out } );
+
+	// IPv6 pseudo-header
+	p.crc.add(&ip6_out.ip6_src, sizeof(in6_addr));
+	p.crc.add(&ip6_out.ip6_dst, sizeof(in6_addr));
+	p.crc.add(next);
 
 	// dispatch to layer four handling
 	dispatch(p, next);
@@ -201,5 +247,6 @@ Netserver_IPv6::Netserver_IPv6(const ether_addr& ether)
 	link_local.s6_addr[13] = ether.ether_addr_octet[3];
 	link_local.s6_addr[14] = ether.ether_addr_octet[4];
 	link_local.s6_addr[15] = ether.ether_addr_octet[5];
+	std::cerr << link_local << std::endl;
 	addr.push_back(link_local);
 }

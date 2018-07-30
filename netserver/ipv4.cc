@@ -141,6 +141,11 @@ void Netserver_IPv4::recv(NetserverPacket& p) const
 	ip4_out.ip_dst = ip4_in.ip_src;
 	p.push(iovec { &ip4_out, sizeof ip4_out } );
 
+	// IPv4 pseudo-header
+	p.crc.add(&ip4_in.ip_src, sizeof(in_addr));
+	p.crc.add(&ip4_in.ip_dst, sizeof(in_addr));
+	p.crc.add(ip4_in.ip_p);
+
 	// dispatch to layer four handling
 	dispatch(p, ip4_in.ip_p);
 }

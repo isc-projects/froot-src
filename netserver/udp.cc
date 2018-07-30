@@ -49,7 +49,20 @@ void Netserver_UDP::recv(NetserverPacket& p) const
 void Netserver_UDP::send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen) const
 {
 	auto& udp_out = *reinterpret_cast<udphdr*>(iovs[1].iov_base);	// FIXME
-	udp_out.uh_ulen = htons(payload_length(iovs));
+
+	uint16_t len = payload_length(iovs);
+
+	udp_out.uh_ulen = htons(len);
+
+        // update checksum with the UCP header and other payload data
+	auto crc = p.crc;
+	crc.add(len);		// add payload length to the pseudo-header
+
+	udp_out.uh_sum = 0;
+        for (auto iter = iovs.cbegin() + 1; iter != iovs.cend(); ++iter) {
+                crc.add(*iter);
+        }
+	udp_out.uh_sum = crc.value();
 
 	send_up(p, iovs, iovlen);
 }

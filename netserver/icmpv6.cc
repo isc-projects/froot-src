@@ -5,7 +5,8 @@
 #include "icmpv6.h"
 #include "checksum.h"
 
-Netserver_ICMPv6::Netserver_ICMPv6(/* const ether_addr& ether, const in6_addr& ipv6 */)
+Netserver_ICMPv6::Netserver_ICMPv6(const ether_addr& ether /*, const in6_addr& ipv6 */)
+	: ether(ether)
 {
 }
 
@@ -20,17 +21,31 @@ void Netserver_ICMPv6::recv(NetserverPacket &p) const
 		if (in.available() < sizeof(in6_addr)) return;
 		auto& target = in.read<in6_addr>();
 
-		nd_neighbor_advert out;
+		// buffer for accumulated output
+		uint8_t buffer[sizeof(nd_neighbor_advert) + sizeof(nd_opt_hdr) + sizeof(ether_addr)];
+		WriteBuffer out(buffer, sizeof buffer);
 
-		out.nd_na_type = ND_NEIGHBOR_ADVERT;
-		out.nd_na_code = 0;
-		out.nd_na_flags_reserved = htonl(ND_NA_FLAG_SOLICITED | ND_NA_FLAG_OVERRIDE);
-		out.nd_na_target = target;
+		// ND advert header
+		auto& na = out.reserve<nd_neighbor_advert>();
+		na.nd_na_type = ND_NEIGHBOR_ADVERT;
+		na.nd_na_code = 0;
+		na.nd_na_cksum = 0;
+		na.nd_na_flags_reserved = ND_NA_FLAG_SOLICITED | ND_NA_FLAG_OVERRIDE;
+		na.nd_na_target = target;
 
-		out.nd_na_cksum = hdr.icmp6_cksum + 1;
+		// Target link-address option
+		auto& opt = out.reserve<nd_opt_hdr>();
+		opt.nd_opt_type = ND_OPT_TARGET_LINKADDR;
+		opt.nd_opt_len = 1;	// units of 8 octets
+		out.write<ether_addr>(ether);
 
-		p.push(iovec { &out, sizeof out });
+		// calculate ICMPv6 checksum
+		auto crc = p.crc;		// IPv6 pseudo-header
+		crc.add(sizeof buffer);		// payload length
+		crc.add(buffer, sizeof buffer);	// ICMP data
+		na.nd_na_cksum = crc.value();
 
+		p.push(out);
 		send(p);
 	}
 }

@@ -22,27 +22,24 @@ struct __attribute__((packed)) tcp_mss_opt {
 	uint16_t	mss;
 };
 
-static void tcp_checksum(std::vector<iovec>& iov)
+static void tcp_checksum(NetserverPacket p, std::vector<iovec>& iov)
 {
-	auto& ip = *reinterpret_cast<struct ip*>(iov[0].iov_base);	// could be IPv6
-	auto& tcp = *reinterpret_cast<tcphdr*>(iov[1].iov_base);
+	// take a copy of the pseudo-header checksum so far
+	auto crc = p.crc;
 
-	// clear staring checksum
-	tcp.th_sum = 0;
-
-	// add pseudo header
-	Checksum crc;
-	crc.add(&ip.ip_src, sizeof ip.ip_src);
-	crc.add(&ip.ip_dst, sizeof ip.ip_dst);
-	crc.add(ip.ip_p);
+	// update it with payload length info
 	crc.add(payload_length(iov));
 
-	// payload
+	// clear starting checksum
+	auto& tcp = *reinterpret_cast<tcphdr*>(iov[1].iov_base);
+	tcp.th_sum = 0;
+
+	// update checksum with the TCP header and other payload data
 	for (auto iter = iov.cbegin() + 1; iter != iov.cend(); ++iter) {
 		crc.add(*iter);
 	}
 
-	// save the result in the packet
+	// save the result back in the packet
 	tcp.th_sum = crc.value();
 }
 
@@ -63,7 +60,7 @@ void Netserver_TCP::send_flags(NetserverPacket& p, uint8_t flags) const
 	}
 	tcp.th_ack = htonl(seq + 1);
 	tcp.th_flags = flags;
-	tcp_checksum(p.iovs);
+	tcp_checksum(p, p.iovs);
 
 	send_up(p);
 }
@@ -124,7 +121,7 @@ void Netserver_TCP::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, 
 			iter = iovs.insert(iter, iovec { base + vec.iov_len, len - vec.iov_len});
 
 			// send segment, remembering current layer ready for next segment
-			tcp_checksum(out);
+			tcp_checksum(p, out);
 			auto current = p.current;
 			send_up(p, out, out.size());
 			p.current = current;
@@ -144,7 +141,7 @@ void Netserver_TCP::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, 
 	// send final segment
 	tcp.th_flags |= TH_FIN;
 
-	tcp_checksum(iovs);
+	tcp_checksum(p, iovs);
 	send_up(p, iovs, iovs.size());
 }
 
