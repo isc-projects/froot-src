@@ -366,11 +366,3 @@ void Context::reset()
 	// clear buffer positions
 	head.reset();
 }
-
-Context::Context(const Zone& zone) : zone(zone)
-{
-}
-
-Context::~Context()
-{
-}

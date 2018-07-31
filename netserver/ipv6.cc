@@ -37,7 +37,12 @@ void Netserver_IPv6::send_fragment(NetserverPacket& p,
 	ip6.ip6_plen = htons(chunk + sizeof frag);
 	frag.ip6f_offlg = htons((offset & 0xfff8) | mf);
 
+	// send the fragment, but reset the current layer after if there's MF
+	auto current = p.current;
 	send_up(p, iovs, iovlen);
+	if (mf) {
+		p.current = current;
+	}
 }
 
 void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen) const
@@ -101,10 +106,8 @@ void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 			// assignment necessary in case old iterator is invalidated
 			iter = iovs.insert(iter, iovec { base + vec.iov_len, len - vec.iov_len});
 
-			// send fragment (with MF bit), remembering which layer we're on
-			auto tmp = p.current;
+			// send fragment with MF bit
 			send_fragment(p, offset, chunk, iovs, iter - iovs.cbegin(), true);
-			p.current = tmp;;
 
 			// remove the already transmitted iovecs (excluding the IPv6 header and Fragment EH)
 			iter = iovs.erase(iovs.begin() + 2, iter);
@@ -231,7 +234,7 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 	ip6_out.ip6_dst = ip6_in.ip6_src;
 	p.push(iovec { &ip6_out, sizeof ip6_out } );
 
-	// IPv6 pseudo-header
+	// calculate interim IPv6 pseudo-header checksum
 	p.crc.add(&ip6_out.ip6_src, sizeof(in6_addr));
 	p.crc.add(&ip6_out.ip6_dst, sizeof(in6_addr));
 	p.crc.add(next);
