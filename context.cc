@@ -243,6 +243,8 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out, bool tcp)
 		return false;
 	}
 
+	// point of no return - anything beyond here will generate a response
+
 	if (!valid_header(rx_hdr)) {
 		rcode = LDNS_RCODE_FORMERR;
 	} else {
@@ -257,23 +259,21 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out, bool tcp)
 		}
 	}
 
-	// response bits
-	bool aa_bit = answer->authoritative();
-	bool tc_bit = false;
-
+	// calculate the total length of the response packet (needed for TCP or truncation)
 	size_t total_len = sizeof(dnshdr) + qdsize + answer->size();
-
-	// remove the EDNS length if we're not going to include it
 	if (!has_edns) {
 		total_len -= sizeof(edns_opt_rr);
 	}
 
+	// handle truncation
+	bool tc_bit = !tcp && (total_len > bufsize);
+	if (tc_bit) {
+		answer = Answer::empty;		// NB: initially includes OPT RR
+	}
+
+	// output the framing header for TCP
 	if (tcp) {
 		(void) head.write<uint16_t>(htons(total_len));
-	} else if (total_len > bufsize) {
-		// handle truncation
-		tc_bit = true;
-		answer = Answer::empty;		// includes OPT RR
 	}
 
 	// craft response header
@@ -281,6 +281,7 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out, bool tcp)
 	tx_hdr.id = rx_hdr.id;
 
 	// response flags
+	bool aa_bit = answer->authoritative();
 	uint16_t flags = ntohs(rx_hdr.flags);
 	flags &= 0x0110;		// copy RD + CD
 	flags |= 0x8000;		// QR
@@ -299,25 +300,21 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out, bool tcp)
 	::memcpy(head.reserve<uint8_t>(qdsize), &in[qdstart], qdsize);
 	out.push_back(head);
 
-	// save answer
-	if (answer) {
-		if (answer == Answer::empty) {
-			out.push_back(*answer);
-		} else {
-			out.push_back(answer->data_offset_by(qdsize, _an_buf));
-		}
-	}
+	// get the data buffer for the answer
+	iovec payload = (answer == Answer::empty) ? *answer : answer->data_offset_by(qdsize, _an_buf);
 
-	// adjust OPT RR if needed
-	auto& payload = out.back();
 	if (has_edns) {
+		// Fixup the extended rcode
 		auto* p = reinterpret_cast<uint8_t*>(payload.iov_base) + payload.iov_len - sizeof(edns_opt_rr);
 		auto& edns = *reinterpret_cast<edns_opt_rr*>(p);
 		edns.ercode = (rcode >> 4);
 	} else {
+		// remove the OPT RR from the payload and ARCOUNT
 		payload.iov_len -= sizeof(edns_opt_rr);
 		tx_hdr.arcount = htons(ntohs(tx_hdr.arcount) - 1);
 	}
+
+	out.push_back(payload);
 
 	return true;
 }
