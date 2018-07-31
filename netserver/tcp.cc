@@ -204,16 +204,13 @@ void Netserver_TCP::recv(NetserverPacket& p) const
 	} else if (flags == TH_ACK) {
 		// ignore
 	} else {
-		if (in.available() < 2) {
-			send_flags(p, TH_RST);
-			return;
-		}
-		auto len = ntohs(in.read<uint16_t>());
-		if (in.available() < len) {
-			send_flags(p, TH_RST);
-			return;
-		}
-
+		// remember current layer and send the packet on
+		auto current = p.current;
 		dispatch(p, port);
+
+		// if we haven't changed layer we didn't reply, so send a TCP RST
+		if (current == p.current) {
+			send_flags(p, TH_RST);
+		}
 	}
 }

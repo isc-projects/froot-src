@@ -214,6 +214,16 @@ const Answer* Context::perform_lookup()
 
 bool Context::execute(ReadBuffer& in, std::vector<iovec>& out, bool tcp)
 {
+	// handle TCP framing
+	if (tcp) {
+		// require and read the length word
+		if (in.available() < 2) return false;
+		auto len = ntohs(in.read<uint16_t>());
+
+		// ensure the read buffer is big enough
+		if (in.available() < len) return false;
+	}
+
 	// default answer
 	auto answer = Answer::empty;
 
@@ -252,6 +262,12 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out, bool tcp)
 	bool tc_bit = false;
 
 	size_t total_len = sizeof(dnshdr) + qdsize + answer->size();
+
+	// remove the EDNS length if we're not going to include it
+	if (!has_edns) {
+		total_len -= sizeof(edns_opt_rr);
+	}
+
 	if (tcp) {
 		(void) head.write<uint16_t>(htons(total_len));
 	} else if (total_len > bufsize) {

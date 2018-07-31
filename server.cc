@@ -18,7 +18,14 @@ void DNSServer::recv(NetserverPacket& p) const
 	bool tcp = (dynamic_cast<const Netserver_TCP*>(up) != nullptr);
 
 	Context ctx(zone);
-	if (ctx.execute(p.readbuf, p.iovs, tcp)) {
+	auto reply = ctx.execute(p.readbuf, p.iovs, tcp);
+
+	// consume the rest of the inbound TCP segment so it can be ACK'd.
+	if (tcp) {
+		(void) p.readbuf.read<uint8_t>(p.readbuf.available());
+	}
+
+	if (reply) {
 		send_up(p);
 	}
 }
