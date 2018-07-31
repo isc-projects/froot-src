@@ -10,7 +10,7 @@ private:
 	std::vector<in6_addr> addr;
 
 	bool match(const in6_addr& a) const;
-	// void send_fragment(NetserverPacket& p, uint16_t offset, uint16_t chunk, const std::vector<iovec>& iov, size_t iovlen, bool mf) const;
+	void send_fragment(NetserverPacket& p, uint16_t offset, uint16_t chunk, const std::vector<iovec>& iov, size_t iovlen, bool mf) const;
 	
 public:
 	Netserver_IPv6(const ether_addr& ether);

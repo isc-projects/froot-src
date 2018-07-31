@@ -17,22 +17,6 @@ static std::ostream& operator<<(std::ostream& os, const in6_addr& addr)
 	return os << inet_ntop(AF_INET6, &addr, buf, sizeof buf);
 }
 
-#if 0
-void Netserver_IPv4::send_fragment(NetserverPacket& p,
-	uint16_t offset, uint16_t chunk,
-	const std::vector<iovec>& iovs, size_t iovlen, bool mf) const
-{
-	// calculate offsets and populate IP header
-	auto& ip = *reinterpret_cast<struct ip*>(iovs[0].iov_base);	// TODO: offset 0
-	ip.ip_len = htons(chunk + sizeof ip);
-	ip.ip_off = htons((mf << 13) | (offset >> 3));
-	ip.ip_sum = 0;
-	ip.ip_sum = Checksum().add(&ip, sizeof ip).value();
-
-	send_up(p, iovs, iovlen);
-}
-#endif
-
 static size_t payload_length(const std::vector<iovec>& iov)
 {
 	return std::accumulate(iov.cbegin() + 1, iov.cend(), 0U,
@@ -42,36 +26,55 @@ static size_t payload_length(const std::vector<iovec>& iov)
 	);
 }
 
-void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen) const
+void Netserver_IPv6::send_fragment(NetserverPacket& p,
+	uint16_t offset, uint16_t chunk,
+	const std::vector<iovec>& iovs, size_t iovlen, bool mf) const
 {
-	auto& ip6_out = *reinterpret_cast<ip6_hdr*>(iovs_in[0].iov_base);	// FIXME
-	ip6_out.ip6_plen = htons(payload_length(iovs_in));
+	// calculate offsets and populate headers
+	auto& ip6 = *reinterpret_cast<ip6_hdr*>(iovs[0].iov_base);	// FIXME
+	auto& frag = *reinterpret_cast<ip6_frag*>(iovs[1].iov_base);	// FIXME
 
-	send_up(p, iovs_in, iovlen);
+	ip6.ip6_plen = htons(chunk + sizeof frag);
+	frag.ip6f_offlg = htons((offset & 0xfff8) | mf);
+
+	send_up(p, iovs, iovlen);
 }
 
-#if 0
 void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen) const
 {
 	// thread local RNG for generating IPv6 IDs
 	thread_local auto rnd = std::mt19937(std::chrono::system_clock::now().time_since_epoch().count() + 1);
 
+	// determine maximum payload fragment size
+	auto mtu = 1500U;			// TODO: s.getmtu();
+	auto len = payload_length(iovs_in);
+
+	auto& ip6_out = *reinterpret_cast<ip6_hdr*>(iovs_in[0].iov_base);	// FIXME
+
+	// if it fits don't fragment it
+	if (len + sizeof(ip6_hdr) < mtu) {
+		ip6_out.ip6_plen = htons(len);
+		send_up(p, iovs_in, iovlen);
+		return;
+	}
+
 	// copy vectors because we're going to modify them
 	auto iovs = iovs_in;
 
-	// set a random packet ID
-	auto& ip = *reinterpret_cast<struct ip*>(iovs[0].iov_base);
-	ip.ip_id = rnd();
+	// create fragment header and add to output
+	uint32_t id = rnd();
+	ip6_frag frag = { ip6_out.ip6_nxt, 0, 0, id };
+	iovs.insert(iovs.begin() + 1, iovec { &frag, sizeof frag });
 
-	// determine maximum payload fragment size
-	auto mtu = 1500;			// TODO: s.getmtu();
-	auto max_frag = mtu - sizeof(struct ip);
+	// the original IPv6 nxt field has to change now
+	ip6_out.ip6_nxt = IPPROTO_FRAGMENT;
 
 	// state variables
+	auto max_frag = mtu - sizeof(ip6_hdr) - sizeof(ip6_frag);
 	auto chunk = 0U;
 	auto offset = 0U;
 
-	auto iter = iovs.begin() + 1;
+	auto iter = iovs.begin() + 2;
 	while (iter != iovs.end()) {
 
 		auto& vec = *iter++;
@@ -100,11 +103,11 @@ void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 
 			// send fragment (with MF bit), remembering which layer we're on
 			auto tmp = p.current;
-			send_fragment(p, offset, chunk, iovs, iovs.size(), false);
+			send_fragment(p, offset, chunk, iovs, iter - iovs.cbegin(), true);
 			p.current = tmp;;
 
-			// remove the already transmitted iovecs (excluding the IP header)
-			iter = iovs.erase(iovs.begin() + 1, iter);
+			// remove the already transmitted iovecs (excluding the IPv6 header and Fragment EH)
+			iter = iovs.erase(iovs.begin() + 2, iter);
 
 			// start collecting the next chunk
 			offset += chunk;
@@ -115,7 +118,6 @@ void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 	// send final fragment
 	send_fragment(p, offset, chunk, iovs, iovs.size(), false);
 }
-#endif
 
 static bool match_solicited(const std::vector<in6_addr>& list, const in6_addr& addr)
 {

@@ -76,7 +76,7 @@ void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 			iter = iovs.insert(iter, iovec { base + vec.iov_len, len - vec.iov_len});
 
 			// send fragment (with MF bit)
-			send_fragment(p, offset, chunk, iovs, iovs.size(), false);
+			send_fragment(p, offset, chunk, iovs, iter - iovs.begin(), true);
 
 			// remove the already transmitted iovecs (excluding the IP header)
 			iter = iovs.erase(iovs.begin() + 1, iter);

@@ -70,7 +70,7 @@ void Netserver_TCP::send_flags(NetserverPacket& p, uint8_t flags) const
 //
 void Netserver_TCP::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen) const
 {
-	uint16_t acked = p.readbuf.position() - sizeof(ip) - sizeof(tcphdr);	// FIXME
+	uint16_t acked = p.readbuf.position() - p.iovs[0].iov_len - p.iovs[1].iov_len;	// FIXME
 
 	// copy iovs so we can mutate them
 	auto iovs = iovs_in;
