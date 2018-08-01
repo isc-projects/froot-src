@@ -9,8 +9,11 @@ class Netserver_ICMPv6 : public NetserverLayer {
 
 private:
 	const ether_addr& ether;
-//	const in6_addr& ipv6;
-	
+
+private:
+	void neighbor_solicit(NetserverPacket& p) const;
+	void echo_request(NetserverPacket& p) const;
+
 public:
 	Netserver_ICMPv6(const ether_addr& ether /*, const in6_addr& ipv6 */);
 
