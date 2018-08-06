@@ -26,6 +26,23 @@ static size_t payload_length(const std::vector<iovec>& iov)
 	);
 }
 
+static in6_addr ether_to_link_local(const ether_addr& ether)
+{
+	in6_addr ll = { 0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xfe, 0, 0, 0 };
+
+	auto& a = ll.s6_addr;
+	auto& e = ether.ether_addr_octet;
+
+	a[8] = e[0] ^ 0x02;
+	a[9] = e[1];
+	a[10] = e[2];
+	a[13] = e[3];
+	a[14] = e[4];
+	a[15] = e[5];
+
+	return ll;
+}
+
 void Netserver_IPv6::send_fragment(NetserverPacket& p,
 	uint16_t offset, uint16_t chunk,
 	const std::vector<iovec>& iovs, size_t iovlen, bool mf) const
@@ -245,13 +262,7 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 
 Netserver_IPv6::Netserver_IPv6(const ether_addr& ether)
 {
-	in6_addr link_local = { 0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xfe, 0, 0, 0 };
-	link_local.s6_addr[8] = ether.ether_addr_octet[0] ^ 0x02;
-	link_local.s6_addr[9] = ether.ether_addr_octet[1];
-	link_local.s6_addr[10] = ether.ether_addr_octet[2];
-	link_local.s6_addr[13] = ether.ether_addr_octet[3];
-	link_local.s6_addr[14] = ether.ether_addr_octet[4];
-	link_local.s6_addr[15] = ether.ether_addr_octet[5];
+	auto link_local = ether_to_link_local(ether);
 	std::cerr << link_local << std::endl;
 	addr.push_back(link_local);
 }
