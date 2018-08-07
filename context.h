@@ -44,5 +44,5 @@ public:
 	Context(const Zone& zone) : zone(zone) {};
 
 	bool execute(ReadBuffer& in, std::vector<iovec>& iov, bool tcp = false);
-	constexpr Answer::Type type() const;
+	Answer::Type type() const;
 };

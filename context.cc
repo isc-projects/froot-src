@@ -319,7 +319,7 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out, bool tcp)
 	return true;
 }
 
-constexpr Answer::Type Context::type() const
+Answer::Type Context::type() const
 {
 	if (!match) {
 		return Answer::Type::nxdomain;
