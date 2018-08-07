@@ -45,18 +45,20 @@ static in6_addr ether_to_link_local(const ether_addr& ether)
 
 void Netserver_IPv6::send_fragment(NetserverPacket& p,
 	uint16_t offset, uint16_t chunk,
-	const std::vector<iovec>& iovs, size_t iovlen, bool mf) const
+	const std::vector<iovec>& iovs_in, size_t iovlen, bool mf) const
 {
-	// calculate offsets and populate headers
-	auto& ip6 = *reinterpret_cast<ip6_hdr*>(iovs[0].iov_base);	// FIXME
-	auto& frag = *reinterpret_cast<ip6_frag*>(iovs[1].iov_base);	// FIXME
+	// access the memory set aside for the header and fragment EH
+	WriteBuffer out(reinterpret_cast<uint8_t*>(iovs_in[0].iov_base), sizeof(ip6_hdr) + sizeof(ip6_frag));	// FIXME
+	auto& ip6 = out.reserve<ip6_hdr>();
+	auto& frag = out.reserve<ip6_frag>();
 
+	// calculate offsets and populate headers
 	ip6.ip6_plen = htons(chunk + sizeof frag);
 	frag.ip6f_offlg = htons((offset & 0xfff8) | mf);
 
 	// send the fragment, but reset the current layer after if there's MF
 	auto current = p.current;
-	send_up(p, iovs, iovlen);
+	send_up(p, iovs_in, iovlen);
 	if (mf) {
 		p.current = current;
 	}
@@ -68,10 +70,12 @@ void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 	thread_local auto rnd = std::mt19937(std::chrono::system_clock::now().time_since_epoch().count() + 1);
 
 	// determine maximum payload fragment size
-	auto mtu = 1500U;			// TODO: s.getmtu();
+	auto mtu = 1500U;						// FIXME: s.getmtu();
 	auto len = payload_length(iovs_in);
 
-	auto& ip6_out = *reinterpret_cast<ip6_hdr*>(iovs_in[0].iov_base);	// FIXME
+	// access the memory set aside for the header and fragment EH
+	WriteBuffer out(reinterpret_cast<uint8_t*>(iovs_in[0].iov_base), sizeof(ip6_hdr) + sizeof(ip6_frag));	// FIXME
+	auto& ip6_out = out.reserve<ip6_hdr>();
 
 	// if it fits don't fragment it
 	if (len + sizeof(ip6_hdr) < mtu) {
@@ -83,10 +87,15 @@ void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 	// copy vectors because we're going to modify them
 	auto iovs = iovs_in;
 
-	// create fragment header and add to output
-	uint32_t id = rnd();
-	ip6_frag frag = { ip6_out.ip6_nxt, 0, 0, id };
-	iovs.insert(iovs.begin() + 1, iovec { &frag, sizeof frag });
+	// use the extra space in the header for the fragment EH
+	auto& frag = out.reserve<ip6_frag>();
+	frag.ip6f_nxt = ip6_out.ip6_nxt;
+	frag.ip6f_reserved = 0;
+	frag.ip6f_offlg = 0;
+	frag.ip6f_ident = rnd();
+
+	// update the first iov to reflect its length
+	iovs[0] = out;
 
 	// the original IPv6 nxt field has to change now
 	ip6_out.ip6_nxt = IPPROTO_FRAGMENT;
@@ -96,7 +105,7 @@ void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 	auto chunk = 0U;
 	auto offset = 0U;
 
-	auto iter = iovs.begin() + 2;
+	auto iter = iovs.begin() + 1;
 	while (iter != iovs.end()) {
 
 		auto& vec = *iter++;
@@ -127,7 +136,7 @@ void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 			send_fragment(p, offset, chunk, iovs, iter - iovs.cbegin(), true);
 
 			// remove the already transmitted iovecs (excluding the IPv6 header and Fragment EH)
-			iter = iovs.erase(iovs.begin() + 2, iter);
+			iter = iovs.erase(iovs.begin() + 1, iter);
 
 			// start collecting the next chunk
 			offset += chunk;
@@ -235,8 +244,11 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 	// ignore if the next protocol isn't registered
 	if (!registered(next)) return;
 
-	// IPv6 header creation
-	ip6_hdr ip6_out;
+	// IPv6 header, allowing space for a fragment EH to be added
+	uint8_t buffer[sizeof(ip6_hdr) + sizeof(ip6_frag)];
+	WriteBuffer out(buffer, sizeof buffer);
+	auto& ip6_out = out.reserve<ip6_hdr>();
+
 	ip6_out.ip6_flow = ip6_in.ip6_flow;
 	ip6_out.ip6_plen = 0;
 	ip6_out.ip6_nxt = next;
@@ -249,7 +261,7 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 		ip6_out.ip6_src = ip6_in.ip6_dst;
 	}
 	ip6_out.ip6_dst = ip6_in.ip6_src;
-	p.push(iovec { &ip6_out, sizeof ip6_out } );
+	p.push(out);
 
 	// calculate interim IPv6 pseudo-header checksum
 	p.crc.add(&ip6_out.ip6_src, sizeof(in6_addr));
