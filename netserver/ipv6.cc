@@ -269,6 +269,7 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 	p.crc.add(next);
 
 	// dispatch to layer four handling
+	p.l4 = next;
 	dispatch(p, next);
 }
 

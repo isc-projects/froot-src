@@ -2,6 +2,7 @@
 
 #include <netinet/in.h>
 #include <netinet/udp.h>
+#include <net/ethernet.h>
 
 #include "netserver.h"
 

@@ -118,6 +118,7 @@ void Netserver_AFPacket::recv(NetserverPacket& p) const
 {
 	auto* addr = reinterpret_cast<const sockaddr_ll*>(p.addr);
 	uint16_t ethertype = ntohs(addr->sll_protocol);
+	p.l3 = ethertype;
 	dispatch(p, ethertype);
 }
 

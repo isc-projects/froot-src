@@ -54,15 +54,17 @@ void Netserver_UDP::send(NetserverPacket& p, const std::vector<iovec>& iovs, siz
 
 	udp_out.uh_ulen = htons(len);
 
-        // update checksum with the UCP header and other payload data
-	auto crc = p.crc;
-	crc.add(len);		// add payload length to the pseudo-header
+        // optionally update checksum with the UCP header and other payload data
+	if (p.l3 == ETHERTYPE_IPV6) {
+		auto crc = p.crc;
+		crc.add(len);		// add payload length to the pseudo-header
 
-	udp_out.uh_sum = 0;
-        for (auto iter = iovs.cbegin() + 1; iter != iovs.cend(); ++iter) {
-                crc.add(*iter);
-        }
-	udp_out.uh_sum = crc.value();
+		udp_out.uh_sum = 0;
+		for (auto iter = iovs.cbegin() + 1; iter != iovs.cend(); ++iter) {
+			crc.add(*iter);
+		}
+		udp_out.uh_sum = crc.value();
+	}
 
 	send_up(p, iovs, iovlen);
 }

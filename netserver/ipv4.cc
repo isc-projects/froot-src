@@ -147,5 +147,6 @@ void Netserver_IPv4::recv(NetserverPacket& p) const
 	p.crc.add(ip4_in.ip_p);
 
 	// dispatch to layer four handling
+	p.l4 = ip4_in.ip_p;
 	dispatch(p, ip4_in.ip_p);
 }

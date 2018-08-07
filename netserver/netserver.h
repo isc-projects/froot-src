@@ -23,6 +23,8 @@ public:
 
 	NetserverLayers			layers;
 	std::vector<iovec>		iovs;
+	uint16_t			l3 = 0;
+	uint8_t				l4 = 0;
 	int8_t				current = 0;
 
 public:

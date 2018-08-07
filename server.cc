@@ -13,9 +13,7 @@
 
 void DNSServer::recv(NetserverPacket& p) const
 {
-	auto state = p.layers.back();
-	auto *up = state.first;
-	bool tcp = (dynamic_cast<const Netserver_TCP*>(up) != nullptr);
+	bool tcp = (p.l4 == IPPROTO_TCP);
 
 	Context ctx(zone);
 	auto reply = ctx.execute(p.readbuf, p.iovs, tcp);
