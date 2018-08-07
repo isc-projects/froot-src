@@ -10,12 +10,9 @@ starts multiple threads for handling queries.
 server.cc, server.h
 -------------------
 
-The main coordination class, which receives raw IP frames from the
+The main coordination class, which receives payload frames from the
 network stack, creating a `Context` for each DNS query and subequently
-passing the entire response back to the network stack.
-
-Since the server uses raw sockets fragmentation of IP packets that
-exceed the MTU is done here.
+passes the entire response back to the network stack.
 
 context.cc, context.h
 ---------------------
@@ -84,6 +81,79 @@ zone.cc, zone.h
 
 The `Zone` class handles loading a zone file in RFC 1035 master file
 format, and then pre-compiling an `AnswerSet` for each TLD therein.
+
+Network Stack
+=============
+
+NB: All code in the netserver/ directory
+
+netserver.cc, netserver.h
+-------------------------
+
+Defines an abstraction layer for handling packets and passing them up
+and down the network stack.   Also defines a generic NetserverPacket
+container which retains the state of a packet as it moves around between
+layers.
+
+checksum.h
+----------
+
+Used to calculate rolling checksums of IP data, per RFC 791.
+
+afpacket.cc, afpacket.h
+-----------------------
+
+Serves as an input and output layer for the network stack, receiving
+raw frames from the Linux kernel in `AF_PACKET` mode and passing them
+to the appropriate layer three protocol handler.
+
+arp.cc, arp.h
+-------------
+
+ARP layer for responding to ARP requests for the configured IPv4
+address of the stack.
+
+ipv4.cc, ipv4.h
+---------------
+
+IPv4 layer.  Handles outbound fragmentation, but not inbound.
+
+ipv6.cc, ipv6.h
+---------------
+
+IPv6 layer.  Handles outbound fragmentation, but not inbound.  Will
+attempt to skip and ignore any additional Extension Headers seen on
+inbound packets.
+
+It automatically creates a link-local EUI64 format address from the
+MAC address of the network interface, and will forward on packets
+addressed to that address, any additional configured address, and
+also to any associated Solicited Node address.
+
+icmp.cc, icmp.h
+---------------
+
+ICMP layer for IPv4.  It only responds to `ICMP_ECHO_REQUEST packets`.
+
+icmpv6.cc, icmpv6.h
+-------------------
+
+ICMP layer for IPv6.  It responses to Neighbor Discovery packets and
+ICMPv6 Echo Request packets.
+
+udp.cc, udp.h
+-------------
+
+UDP layer - handles dispatch on a per-port basis to higher layers and
+calculates checksums as necessary on responses (e.g. for IPv6)
+
+tcp.cc, tcp.h
+-------------
+
+An implementation of Stateless TCP (per Huston et al) that can handle
+short-lived TCP connections by simply sending all payload packets at
+once and ignoring any ACK packets sent by the client.  Retries are
+therefore not supported.
 
 Benchmarking Code
 =================
