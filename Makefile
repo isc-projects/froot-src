@@ -22,7 +22,7 @@ LIBS += -lpthread -lresolv
 
 all: $(BIN)
 
-lightning:	main.o server.o packet.o $(NETSERVER_OBJS) $(COMMON_OBJS)
+lightning:	main.o server.o $(NETSERVER_OBJS) $(COMMON_OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
 lightbench:	 lightbench.o queryfile.o timer.o $(COMMON_OBJS)
@@ -39,7 +39,6 @@ answer.o:	answer.h util.h
 lightbench.o:	context.h zone.h queryfile.h timer.h
 context.o:	context.h zone.h util.h
 main.o:		server.h
-packet.o:	packet.h util.h
 queryfile.o:	queryfile.h util.h
 rrlist.o:	rrlist.h
 server.o:	server.h context.h util.h
@@ -49,5 +48,5 @@ zone.o:		context.h zone.h util.h
 
 answer.h:	buffer.h rrlist.h
 context.h:	buffer.h answer.h zone.h
-server.h:	zone.h packet.h
+server.h:	zone.h
 zone.h:		answer.h
