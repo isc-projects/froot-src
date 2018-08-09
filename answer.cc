@@ -335,8 +335,6 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 	RRList signed_soa = soa;
 	signed_soa.append(name->nsec);
 	signed_soa.append(name->nsec_signatures);
-	signed_soa.append(zone->soa->nsec);
-	signed_soa.append(zone->soa->nsec_signatures);
 
 	// fill out glue
 	auto ns_rrl = ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_NS);
@@ -360,6 +358,10 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 		dnssec[Answer::Type::tld_ds] = new Answer(owner, empty, signed_soa, empty, flags | Answer::Flags::auth);
 	}
 	dnssec[Answer::Type::tld_referral] = new Answer(owner, empty, ns + ds, glue, flags);
+
+	// NXD also requires NSEC covering wildcard label
+	signed_soa.append(zone->soa->nsec);
+	signed_soa.append(zone->soa->nsec_signatures);
 	dnssec[Answer::Type::nxdomain] = new Answer(owner, empty, signed_soa, empty, flags | nc | Answer::Flags::auth);
 }
 
