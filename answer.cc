@@ -360,8 +360,11 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 	dnssec[Answer::Type::tld_referral] = new Answer(owner, empty, ns + ds, glue, flags);
 
 	// NXD also requires NSEC covering wildcard label
-	signed_soa.append(zone->soa->nsec);
-	signed_soa.append(zone->soa->nsec_signatures);
+	if (ldns_dname_compare(owner, zone->soa->name) != 0) {
+		signed_soa.append(zone->soa->nsec);
+		signed_soa.append(zone->soa->nsec_signatures);
+	}
+
 	dnssec[Answer::Type::nxdomain] = new Answer(owner, empty, signed_soa, empty, flags | nc | Answer::Flags::auth);
 }
 
@@ -377,9 +380,8 @@ AnswerSet::AnswerSet(const ldns_dnssec_name* name, const ldns_dnssec_zone *zone,
 
 	if (name == zone->soa) {
 		generate_root_answers(zone, compressed);
-	} else {
-		generate_tld_answers(name, zone, compressed);
 	}
+	generate_tld_answers(name, zone, compressed);
 }
 
 AnswerSet::~AnswerSet()
