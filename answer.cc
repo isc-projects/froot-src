@@ -271,9 +271,10 @@ static RRList find_glue(const ldns_dnssec_rrsets* rrset, const ldns_dnssec_zone*
 
 void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone, bool compress)
 {
-	Answer::Flags flags = Answer::Flags::auth;
+	auto nc = Answer::Flags::nocompress;
+	auto flags = Answer::Flags::none;
 	if (!compress) {
-		flags = flags | Answer::Flags::nocompress;
+		flags = flags | nc;
 	}
 
 	auto name = zone->soa;
@@ -304,7 +305,7 @@ void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone, bool compres
 	dnssec[Answer::Type::root_ns] = new Answer(owner, ns, empty, glue, flags);
 	dnssec[Answer::Type::root_dnskey] = new Answer(owner, dnskey, empty, empty, flags);
 	dnssec[Answer::Type::root_nsec] = new Answer(owner, nsec, ns, glue, flags);
-	dnssec[Answer::Type::root_nodata] = new Answer(owner, empty, soa, empty, flags);
+	dnssec[Answer::Type::root_nodata] = new Answer(owner, empty, soa, empty, flags | nc);
 
 	// query for '. ANY' always contains NS, NSEC, DNSKEY, RRSIGs etc
 	plain[Answer::Type::root_any] = new Answer(owner, soa + ns + nsec + dnskey, empty, glue, flags);
@@ -313,9 +314,11 @@ void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone, bool compres
 
 void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone, bool compress)
 {
-	Answer::Flags flags = Answer::Flags::none;
+	auto nc = Answer::Flags::nocompress;
+	auto flags = Answer::Flags::none;
+
 	if (!compress) {
-		flags = flags | Answer::Flags::nocompress;
+		flags = flags | nc;
 	}
 
 	// temporary const_cast for older versions of ldns
@@ -346,7 +349,7 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 		plain[Answer::Type::tld_ds] = new Answer(owner, empty, soa, empty, flags | Answer::Flags::auth);
 	}
 	plain[Answer::Type::tld_referral] = new Answer(owner, empty, ns, glue, flags);
-	plain[Answer::Type::nxdomain] = new Answer(owner, empty, soa, empty, flags | Answer::Flags::auth);
+	plain[Answer::Type::nxdomain] = new Answer(owner, empty, soa, empty, flags | nc | Answer::Flags::auth);
 
 	// create signed answers - signed referral requires signed DS record
 	flags = flags | Answer::Flags::dnssec;
@@ -357,7 +360,7 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 		dnssec[Answer::Type::tld_ds] = new Answer(owner, empty, signed_soa, empty, flags | Answer::Flags::auth);
 	}
 	dnssec[Answer::Type::tld_referral] = new Answer(owner, empty, ns + ds, glue, flags);
-	dnssec[Answer::Type::nxdomain] = new Answer(owner, empty, signed_soa, empty, flags | Answer::Flags::auth);
+	dnssec[Answer::Type::nxdomain] = new Answer(owner, empty, signed_soa, empty, flags | nc | Answer::Flags::auth);
 }
 
 AnswerSet::AnswerSet(const ldns_dnssec_name* name, const ldns_dnssec_zone *zone, bool compressed)
