@@ -32,17 +32,31 @@ inline uint16_t Checksum::value() const
 
 inline Checksum& Checksum::add(const void* p, size_t n)
 {
-	auto x = reinterpret_cast<const uint8_t*>(p);
+	// no data
+	if (!n) return *this;
 
-	while (n) {
-		auto c = *x++;
-		if (odd) {
-			sum += c;
-		} else {
-			sum += (c << 8);
-		}
-		odd = !odd;
+	// sweep up any LSB
+	auto b = reinterpret_cast<const uint8_t*>(p);
+	if (odd) {
+		auto c = *b++;
+		sum += c;
+		odd = false;
 		--n;
+	}
+
+	// then any sixteen bit words - precondition: odd == false
+	auto w = reinterpret_cast<const uint16_t*>(b);
+	while (n >= 2) {
+		sum += htons(*w++);
+		n -= 2;
+	}
+
+	// then any byte left over - precondition odd == false => MSB
+	if (n) {
+		b = reinterpret_cast<const uint8_t*>(w);
+		auto c = *b++;
+		sum += (c << 8);
+		odd = true;
 	}
 
 	return *this;
