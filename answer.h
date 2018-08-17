@@ -108,6 +108,7 @@ public:
 // convenience operator for combining Flags returning 'Flags'
 // instead of the automatic promotion to 'int' that the '|'
 // operator usually causes
+
 constexpr inline Answer::Flags operator|(Answer::Flags lhs, Answer::Flags rhs)
 {
 	using T = std::underlying_type<Answer::Flags>::type;
@@ -116,6 +117,11 @@ constexpr inline Answer::Flags operator|(Answer::Flags lhs, Answer::Flags rhs)
 		static_cast<T>(lhs) | static_cast<T>(rhs)
 	);
 };
+
+constexpr inline void operator|=(Answer::Flags& lhs, Answer::Flags rhs)
+{
+	lhs = lhs | rhs;
+}
 
 class AnswerSet {
 
