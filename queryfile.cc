@@ -23,26 +23,31 @@ static std::map<std::string, uint16_t> type_map = {
 	{ "SRV",	 33 },
 };
 
+static uint16_t typeNN_to_number(const std::string& type)
+{
+	size_t index;
+	std::string num = type.substr(4, std::string::npos);
+	try {
+		unsigned long val = std::stoul(num, &index, 10);
+		if (num.cbegin() + index != num.cend()) {
+			throw std::runtime_error("numeric QTYPE trailing garbage");
+		} else if (val > std::numeric_limits<uint16_t>::max()) {
+			throw std::runtime_error("numeric QTYPE out of range");
+		} else {
+			return type_map[type] = val;
+		}
+	} catch (std::logic_error& e) {
+		throw std::runtime_error("numeric QTYPE unparseable");
+	}
+}
+
 static uint16_t type_to_number(const std::string& type, bool check_case = true)
 {
 	auto itr = type_map.find(type);
 	if (itr != type_map.end()) {
 		return itr->second;
 	} else if (type.compare(0, 4, "TYPE", 4) == 0) {
-		size_t index;
-		std::string num = type.substr(4, std::string::npos);
-		try {
-			unsigned long val = std::stoul(num, &index, 10);
-			if (num.cbegin() + index != num.cend()) {
-				throw std::runtime_error("numeric QTYPE trailing garbage");
-			} else if (val > std::numeric_limits<uint16_t>::max()) {
-				throw std::runtime_error("numeric QTYPE out of range");
-			} else {
-				return type_map[type] = val;
-			}
-		} catch (std::logic_error& e) {
-			throw std::runtime_error("numeric QTYPE unparseable");
-		}
+		return typeNN_to_number(type);
 	} else {
 		if (check_case) {
 			std::string tmp(type);
@@ -86,7 +91,6 @@ void QueryFile::read_txt(const std::string& filename)
 		line_no++;
 
 		try {
-			Record record;
 			list.push_back(make_record(name, type));
 		} catch (std::runtime_error &e) {
 			std::string error = "reading query file at line "
@@ -116,9 +120,7 @@ void QueryFile::read_raw(const std::string& filename)
 
 			len = ntohs(len);		// swap to host order
 
-			Record record;
-			record.resize(len);
-
+			Record record(len);
 			if (file.read(reinterpret_cast<char*>(record.data()), len)) {
 				list.push_back(record);
 			}
