@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <atomic>
 
+#include <syslog.h>
 #include <arpa/inet.h>
 
 #include <ldns/ldns.h>
@@ -65,7 +66,7 @@ void Zone::load(const std::string& filename, bool compressed)
 	auto serial = ldns_rdf2native_int32(ldns_rr_rdf(soa_rr, 2));
 	ldns_dnssec_zone_deep_free(zone);
 
-	std::cout << "root zone loaded with SOA serial " << serial << std::endl;
+	syslog(LOG_NOTICE, "root zone loaded with SOA serial %u", serial);
 	loaded = true;
 }
 
@@ -92,8 +93,10 @@ const AnswerSet* Zone::lookup(const std::string& qname, bool& matched) const
 
 Zone::Zone()
 {
+	openlog("lightning", LOG_PID | LOG_CONS, LOG_DAEMON);
 }
 
 Zone::~Zone()
 {
+	closelog();
 }
