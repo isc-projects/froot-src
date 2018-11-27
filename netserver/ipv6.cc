@@ -1,10 +1,12 @@
 #include <iostream>
+#include <sstream>
 #include <cstring>
 #include <vector>
 #include <algorithm>
 #include <random>
 #include <chrono>
 
+#include <syslog.h>
 #include <arpa/inet.h>
 #include <netinet/ip6.h>
 
@@ -276,6 +278,9 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 Netserver_IPv6::Netserver_IPv6(const ether_addr& ether)
 {
 	auto link_local = ether_to_link_local(ether);
-	std::cerr << link_local << std::endl;
 	addr.push_back(link_local);
+
+	std::ostringstream os;
+	os << link_local;
+	syslog(LOG_NOTICE, "listening on %s", os.str().c_str());
 }

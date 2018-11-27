@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 #include <unistd.h>
+#include <syslog.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/mman.h>
@@ -174,9 +175,9 @@ bool Netserver_AFPacket::next(int timeout)
 		recv(packet);
 
 	} catch (std::exception& e) {
-		std::cerr << "error: " << e.what() << std::endl;
+		syslog(LOG_WARNING, "Netserver_AFPacket exception: %s", e.what());
 	}
-	
+
 	hdr.tp_status = TP_STATUS_KERNEL;
 	rx_current = (rx_current + 1) % req.tp_frame_nr;
 

@@ -93,10 +93,8 @@ const AnswerSet* Zone::lookup(const std::string& qname, bool& matched) const
 
 Zone::Zone()
 {
-	openlog("lightning", LOG_PID | LOG_CONS, LOG_DAEMON);
 }
 
 Zone::~Zone()
 {
-	closelog();
 }

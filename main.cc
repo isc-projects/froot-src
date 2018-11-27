@@ -3,8 +3,10 @@
 #include <thread>
 #include <vector>
 
+#include <syslog.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/capability.h>
 
 #include "netserver/afpacket.h"
 #include "netserver/ipv4.h"
@@ -33,7 +35,7 @@ void usage(int result = EXIT_FAILURE)
 	cout << "  -i the network interface to listen on" << endl;
 	cout << "  -s the IP address to answer on" << endl;
 	cout << "  -p the UDP port to listen on (default: 53)" << endl;
-	cout << "  -z the zone file to load (default: root.zone)" << endl;
+	cout << "  -f the zone file to load (default: root.zone)" << endl;
 	cout << "  -T the number of threads to run (default: ncpus)" << endl;
 
 	exit(result);
@@ -72,6 +74,9 @@ int app(int argc, char *argv[])
 		std::cerr << "invalid IP option" << std::endl;
 		return EXIT_FAILURE;
 	}
+
+	// configure syslog
+	openlog("lightning", LOG_PID | LOG_CONS, LOG_DAEMON);
 
 	DNSServer server;
 	server.load(zfname, compress);
@@ -132,6 +137,7 @@ int main(int argc, char *argv[])
 	try {
 		return app(argc, argv);
 	} catch (std::exception& e) {
+		syslog(LOG_ERR, "exception: %s", e.what());
 		std::cerr << "error: " << e.what() << std::endl;
 		return EXIT_FAILURE;
 	}
