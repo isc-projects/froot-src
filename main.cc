@@ -6,7 +6,6 @@
 #include <syslog.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <sys/capability.h>
 
 #include "netserver/afpacket.h"
 #include "netserver/ipv4.h"
