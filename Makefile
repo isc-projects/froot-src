@@ -9,7 +9,8 @@ endif
 INCS = $(shell pkg-config $(LDNSPKG) --cflags)
 LIBS = $(shell pkg-config $(LDNSPKG) --libs)
 
-CXXFLAGS = -O3 -g -std=c++14 -Wall -Werror -Wno-error=pragmas $(INCS)
+CXXFLAGS := $(CFLAGS)
+CXXFLAGS += -O3 -g -std=c++14 -Wall -Werror -Wno-error=pragmas $(INCS)
 LDFLAGS =
 
 BIN += lightbench
