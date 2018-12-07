@@ -91,7 +91,7 @@ int app(int argc, char *argv[])
 
 	for (auto i = 0U; i < threads; ++i) {
 
-		workers[i] = std::thread([&]() {
+		workers[i] = std::thread([&](int n) {
 
 			auto raw = Netserver_AFPacket(ifname);
 			auto arp = Netserver_ARP(raw.gethwaddr(), host);
@@ -122,13 +122,13 @@ int app(int argc, char *argv[])
 			server.attach(udp, port);
 			server.attach(tcp, port);
 
-			if (i == 0) {
+			if (n == 0) {
 				syslog(LOG_NOTICE, "listening on %s:%d", inet_ntop(host).c_str(), port);
 				syslog(LOG_NOTICE, "listening on [%s]:%d", inet_ntop(ll).c_str(), port);
 			}
 
 			raw.loop();
-		});
+		}, i);
 
 		thread_setcpu(workers[i], i);
 	}

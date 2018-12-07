@@ -63,7 +63,7 @@ void hexdump(std::ostream& os, const void* buf, size_t n)
 std::string inet_ntop(const in_addr& addr)
 {
 	char buf[INET_ADDRSTRLEN];
-	auto res = ::inet_ntop(AF_INET6, &addr, buf, sizeof buf);
+	auto res = ::inet_ntop(AF_INET, &addr, buf, sizeof buf);
 	if (!res) {
 		throw_errno("inet_ntop");
 	}
