@@ -18,6 +18,7 @@
 #include "netserver/tcp.h"
 
 #include "server.h"
+#include "util.h"
 
 void thread_setcpu(std::thread& t, unsigned int n)
 {
@@ -85,6 +86,7 @@ int app(int argc, char *argv[])
 	threads = std::min(threads, max_threads);
 	threads = std::max(1U, threads);
 
+	syslog(LOG_NOTICE, "starting %d threads", threads);
 	std::vector<std::thread> workers(threads);
 
 	for (auto i = 0U; i < threads; ++i) {
@@ -94,8 +96,9 @@ int app(int argc, char *argv[])
 			auto raw = Netserver_AFPacket(ifname);
 			auto arp = Netserver_ARP(raw.gethwaddr(), host);
 
+			const in6_addr ll = Netserver_IPv6::ether_to_link_local(raw.gethwaddr());
+			auto ipv6 = Netserver_IPv6({ ll });
 			auto ipv4 = Netserver_IPv4(host);
-			auto ipv6 = Netserver_IPv6(raw.gethwaddr());
 
 			auto icmp4 = Netserver_ICMP();
 			auto icmp6 = Netserver_ICMPv6(raw.gethwaddr());
@@ -118,6 +121,11 @@ int app(int argc, char *argv[])
 
 			server.attach(udp, port);
 			server.attach(tcp, port);
+
+			if (i == 0) {
+				syslog(LOG_NOTICE, "listening on %s:%d", inet_ntop(host).c_str(), port);
+				syslog(LOG_NOTICE, "listening on [%s]:%d", inet_ntop(ll).c_str(), port);
+			}
 
 			raw.loop();
 		});

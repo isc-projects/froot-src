@@ -13,22 +13,13 @@
 #include "ipv6.h"
 #include "checksum.h"
 
-static std::ostream& operator<<(std::ostream& os, const in6_addr& addr)
+std::ostream& operator<<(std::ostream& os, const in6_addr& addr)
 {
-	thread_local char buf[INET6_ADDRSTRLEN];
+	char buf[INET6_ADDRSTRLEN];
 	return os << inet_ntop(AF_INET6, &addr, buf, sizeof buf);
 }
 
-static size_t payload_length(const std::vector<iovec>& iov)
-{
-	return std::accumulate(iov.cbegin() + 1, iov.cend(), 0U,
-		[](size_t a, const iovec& b) {
-			return a + b.iov_len;
-		}
-	);
-}
-
-static in6_addr ether_to_link_local(const ether_addr& ether)
+in6_addr Netserver_IPv6::ether_to_link_local(const ether_addr& ether)
 {
 	in6_addr ll = { 0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xfe, 0, 0, 0 };
 
@@ -43,6 +34,15 @@ static in6_addr ether_to_link_local(const ether_addr& ether)
 	a[15] = e[5];
 
 	return ll;
+}
+
+static size_t payload_length(const std::vector<iovec>& iov)
+{
+	return std::accumulate(iov.cbegin() + 1, iov.cend(), 0U,
+		[](size_t a, const iovec& b) {
+			return a + b.iov_len;
+		}
+	);
 }
 
 void Netserver_IPv6::send_fragment(NetserverPacket& p,
@@ -275,12 +275,7 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 	dispatch(p, next);
 }
 
-Netserver_IPv6::Netserver_IPv6(const ether_addr& ether)
+Netserver_IPv6::Netserver_IPv6(const std::vector<in6_addr>& addr)
+	: addr(addr)
 {
-	auto link_local = ether_to_link_local(ether);
-	addr.push_back(link_local);
-
-	std::ostringstream os;
-	os << link_local;
-	syslog(LOG_NOTICE, "listening on %s", os.str().c_str());
 }

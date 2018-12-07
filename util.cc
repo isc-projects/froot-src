@@ -4,6 +4,8 @@
 #include <system_error>
 #include <cerrno>
 
+#include <arpa/inet.h>
+
 #include "util.h"
 
 // potentially branchless conversion to lower-case
@@ -56,4 +58,24 @@ void hexdump(std::ostream& os, const void* buf, size_t n)
 	}
 	os << endl;
 	os.copyfmt(init);
+}
+
+std::string inet_ntop(const in_addr& addr)
+{
+	char buf[INET_ADDRSTRLEN];
+	auto res = ::inet_ntop(AF_INET6, &addr, buf, sizeof buf);
+	if (!res) {
+		throw_errno("inet_ntop");
+	}
+	return std::string(res);
+}
+
+std::string inet_ntop(const in6_addr& addr)
+{
+	char buf[INET6_ADDRSTRLEN];
+	auto res = ::inet_ntop(AF_INET6, &addr, buf, sizeof buf);
+	if (!res) {
+		throw_errno("inet_ntop");
+	}
+	return std::string(res);
 }
