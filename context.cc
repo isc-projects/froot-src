@@ -73,7 +73,11 @@ static bool parse_name(ReadBuffer& in, std::string& name, uint8_t& labels)
 		}
 
 		// consume the label
-		(void) in.read<uint8_t>(c);
+		if (in.available() < c) {
+			return false;
+		} else {
+			(void) in.read<uint8_t>(c);
+		}
 	}
 
 	// should now be pointing at one beyond the root label
