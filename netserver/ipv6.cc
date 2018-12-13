@@ -212,15 +212,11 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 	ReadBuffer& in = p.readbuf;
 
 	// extract L3 header
-	auto version = (in[0] >> 4) & 0x0f;
-	if (version != 6) return;
-
-	// check IPv6 header length
-	auto ihl = sizeof(ip6_hdr);
-	if (in.available() < ihl) return;
-
-	// read IPv6 header
+	if (in.available() < sizeof(ip6_hdr)) return;
 	auto& ip6_in = in.read<ip6_hdr>();
+
+	// check IP version
+	if ((ip6_in.ip6_vfc & 0x0f) != 6) return;
 
 	// hack for broken AF_PACKET size - recreate the buffer
 	// based on the IP header specified length instead of what

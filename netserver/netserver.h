@@ -28,7 +28,7 @@ public:
 	int8_t				current = 0;
 
 public:
-	NetserverPacket(uint8_t* buf, size_t buflen, const sockaddr* addr, socklen_t addrlen);
+	NetserverPacket(const uint8_t* buf, size_t buflen, const sockaddr* addr, socklen_t addrlen);
 
 	void push(const iovec& iov) {
 		iovs.push_back(iov);

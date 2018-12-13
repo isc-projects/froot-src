@@ -96,15 +96,15 @@ void Netserver_IPv4::recv(NetserverPacket& p) const
 	ReadBuffer& in = p.readbuf;
 
 	// extract L3 header
-	auto version = (in[0] >> 4) & 0x0f;
-	if (version != 4) return;
+	if (in.available() < sizeof(struct ip)) return;
+	auto& ip4_in = in.read<struct ip>();
+	if (ip4_in.ip_v != 4) return;
 
 	// check IP header length
-	auto ihl = 4U * (in[0] & 0x0f);
+	auto ihl = ip4_in.ip_hl * 4U;
 	if (in.available() < ihl) return;
 
-	// consume IPv4 header, skipping IP options
-	auto& ip4_in = in.read<struct ip>();
+	// skip IP options
 	if (ihl > sizeof ip4_in) {
 		(void) in.read<uint8_t>(ihl - sizeof ip4_in);
 	}

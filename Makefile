@@ -13,7 +13,7 @@ CXXFLAGS := $(CFLAGS)
 CXXFLAGS += -O3 -g -std=c++14 -Wall -Werror -Wno-error=pragmas $(INCS)
 LDFLAGS =
 
-BIN += lightbench
+BIN += fuzz lightbench
 COMMON_OBJS = context.o zone.o answer.o rrlist.o util.o
 NETSERVER_SRCS = $(wildcard netserver/*.cc)
 NETSERVER_OBJS = $(NETSERVER_SRCS:.cc=.o)
@@ -24,6 +24,9 @@ LIBS += -lpthread -lresolv
 all: $(BIN)
 
 lightning:	main.o server.o $(NETSERVER_OBJS) $(COMMON_OBJS)
+	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
+
+fuzz:		fuzz.o server.o $(NETSERVER_OBJS) $(COMMON_OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
 lightbench:	 lightbench.o queryfile.o timer.o $(COMMON_OBJS)
