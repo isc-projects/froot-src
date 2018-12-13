@@ -19,4 +19,5 @@ public:
 
 public:
 	void load(const std::string& filename, bool compress);
+	void load_sync(const std::string& filename, bool compress);
 };

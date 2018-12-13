@@ -56,3 +56,8 @@ void DNSServer::load(const std::string& filename, bool compress)
 	auto t = std::thread(&DNSServer::loader_thread, this, filename, compress);
 	t.detach();
 }
+
+void DNSServer::load_sync(const std::string& filename, bool compress)
+{
+	zone.load(filename, compress);
+}
