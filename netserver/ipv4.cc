@@ -102,12 +102,12 @@ void Netserver_IPv4::recv(NetserverPacket& p) const
 
 	// check IP header length
 	auto ihl = ip4_in.ip_hl * 4U;
-	if (in.available() < ihl) return;
+	if (ihl < sizeof ip4_in) return;
 
 	// skip IP options
-	if (ihl > sizeof ip4_in) {
-		(void) in.read<uint8_t>(ihl - sizeof ip4_in);
-	}
+	size_t optl = ihl - sizeof ip4_in;
+	if (in.available() < optl) return;
+	(void) in.read<uint8_t>(optl);
 
 	// check it's a registered protocol
 	if (!registered(ip4_in.ip_p)) return;
