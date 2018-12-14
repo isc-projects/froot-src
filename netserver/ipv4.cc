@@ -94,6 +94,7 @@ void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 void Netserver_IPv4::recv(NetserverPacket& p) const
 {
 	ReadBuffer& in = p.readbuf;
+	auto start_pos = in.position();	// for AF_PACKET bug below
 
 	// extract L3 header
 	if (in.available() < sizeof(struct ip)) return;
@@ -120,8 +121,9 @@ void Netserver_IPv4::recv(NetserverPacket& p) const
 	// was returned by the AF_PACKET layer
 	if (in.size() == 46) {
 		size_t pos = in.position();
-		size_t len = ntohs(ip4_in.ip_len);
+		size_t len = start_pos + sizeof(ip4_in) + ntohs(ip4_in.ip_len);
 		if (len < 46) {
+			if (len < pos) return;
 			in = ReadBuffer(&in[0], len);
 			(void) in.read<uint8_t>(pos);
 		}

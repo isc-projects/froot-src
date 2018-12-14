@@ -210,6 +210,7 @@ static uint8_t skip_extension_headers(NetserverPacket& p, uint8_t next)
 void Netserver_IPv6::recv(NetserverPacket& p) const
 {
 	ReadBuffer& in = p.readbuf;
+	auto start_pos = in.position(); // for AF_PACKET bug below
 
 	// extract L3 header
 	if (in.available() < sizeof(ip6_hdr)) return;
@@ -223,8 +224,9 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 	// was returned by the AF_PACKET layer
 	if (in.size() == 46) {
 		size_t pos = in.position();
-		size_t len = ntohs(ip6_in.ip6_plen);
+		size_t len = start_pos + sizeof(ip6_in) + ntohs(ip6_in.ip6_plen);
 		if (len < 46) {
+			if (len < pos) return;
 			in = ReadBuffer(&in[0], len);
 			(void) in.read<uint8_t>(pos);
 		}
