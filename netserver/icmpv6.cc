@@ -49,7 +49,7 @@ void Netserver_ICMPv6::neighbor_solicit(NetserverPacket& p) const
 void Netserver_ICMPv6::echo_request(NetserverPacket& p) const
 {
 	auto& in = p.readbuf;
-	auto hdr = in.read<icmp6_hdr>();
+	auto hdr = in.read<icmp6_hdr>(); // length already checked
 
 	// construct the reply in the copy of the request
 	hdr.icmp6_type = ICMP6_ECHO_REPLY;

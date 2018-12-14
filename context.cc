@@ -98,7 +98,7 @@ void Context::parse_edns(ReadBuffer& in)
 	}
 
 	// impossible EDNS length
-	if (in.available() > 0 && in.available() < 11) {
+	if (in.available() < 11) {
 		rcode = LDNS_RCODE_FORMERR;
 		return;
 	}
