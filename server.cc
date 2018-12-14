@@ -59,5 +59,5 @@ void DNSServer::load(const std::string& filename, bool compress)
 
 void DNSServer::load_sync(const std::string& filename, bool compress)
 {
-	zone.load(filename, compress);
+	zone.load(filename, compress, false);
 }

@@ -43,7 +43,7 @@ void Zone::build_zone(bool compressed)
 	std::atomic_exchange(&aux, new_aux);
 }
 
-void Zone::load(const std::string& filename, bool compressed)
+void Zone::load(const std::string& filename, bool compressed, bool notice)
 {
 	auto origin = ldns_dname_new_frm_str(".");
 	auto fp = fopen(filename.c_str(), "r");
@@ -66,7 +66,10 @@ void Zone::load(const std::string& filename, bool compressed)
 	auto serial = ldns_rdf2native_int32(ldns_rr_rdf(soa_rr, 2));
 	ldns_dnssec_zone_deep_free(zone);
 
-	syslog(LOG_NOTICE, "root zone loaded with SOA serial %u", serial);
+	if (notice)  {
+		syslog(LOG_NOTICE, "root zone loaded with SOA serial %u", serial);
+	}
+
 	loaded = true;
 }
 

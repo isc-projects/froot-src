@@ -31,7 +31,7 @@ private:
 	void build_zone(bool compress);
 
 public:
-	void load(const std::string& filename, bool compress);
+	void load(const std::string& filename, bool compress, bool notice = true);
 	const AnswerSet* lookup(const std::string& qname, bool& match) const;
 
 public:
