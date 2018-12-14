@@ -224,7 +224,7 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 	// was returned by the AF_PACKET layer
 	if (in.size() == 46) {
 		size_t pos = in.position();
-		size_t len = start_pos + sizeof(ip6_in) + ntohs(ip6_in.ip6_plen);
+		size_t len = start_pos + ntohs(ip6_in.ip6_plen);
 		if (len < 46) {
 			if (len < pos) return;
 			in = ReadBuffer(&in[0], len);

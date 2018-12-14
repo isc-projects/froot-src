@@ -121,7 +121,7 @@ void Netserver_IPv4::recv(NetserverPacket& p) const
 	// was returned by the AF_PACKET layer
 	if (in.size() == 46) {
 		size_t pos = in.position();
-		size_t len = start_pos + sizeof(ip4_in) + ntohs(ip4_in.ip_len);
+		size_t len = start_pos + ntohs(ip4_in.ip_len);
 		if (len < 46) {
 			if (len < pos) return;
 			in = ReadBuffer(&in[0], len);
