@@ -10,7 +10,7 @@
 #include "zone.h"
 #include "util.h"
 
-void Zone::build_answers(PData& data, PAux& aux, const ldns_dnssec_name* name, bool compressed)
+void Zone::build_answers(PData& data, PAux& aux, const ldns_dnssec_zone* zone, const ldns_dnssec_name* name, bool compressed)
 {
 	auto owner = name->name;
 	auto rdata = ldns_rdf_data(owner);
@@ -22,7 +22,7 @@ void Zone::build_answers(PData& data, PAux& aux, const ldns_dnssec_name* name, b
 	(*aux)[key] = nd;
 }
 
-void Zone::build_zone(bool compressed)
+void Zone::build_zone(const ldns_dnssec_zone* zone, bool compressed)
 {
 	PData new_data = std::make_shared<Data>();
 	PAux new_aux = std::make_shared<Aux>();
@@ -34,13 +34,24 @@ void Zone::build_zone(bool compressed)
 		auto name = const_cast<ldns_dnssec_name *>(tmp);
 
 		if (!ldns_dnssec_name_is_glue(name)) {
-			build_answers(new_data, new_aux, name, compressed);
+			build_answers(new_data, new_aux, zone, name, compressed);
 		}
 		node = ldns_rbtree_next(node);
 	}
 
 	std::atomic_exchange(&data, new_data);
 	std::atomic_exchange(&aux, new_aux);
+}
+
+void Zone::check_zone(const ldns_dnssec_zone* zone)
+{
+	if (!zone->names) {
+		throw std::runtime_error("names not found in zone");
+	}
+
+	if (!zone->soa) {
+		throw std::runtime_error("no SOA found in zone");
+	}
 }
 
 void Zone::load(const std::string& filename, bool compressed, bool notice)
@@ -51,22 +62,28 @@ void Zone::load(const std::string& filename, bool compressed, bool notice)
 		throw_errno("opening zone file: " + filename);
 	}
 
+	ldns_dnssec_zone *zone = nullptr;
 	auto status = ldns_dnssec_zone_new_frm_fp(&zone, fp, origin, 3600, LDNS_RR_CLASS_IN);
 	fclose(fp);
+
 	ldns_rdf_deep_free(origin);
 
-	if (status != LDNS_STATUS_OK) {
+	if (status != LDNS_STATUS_OK || zone == nullptr) {
 		throw std::runtime_error("zone load failed");
 	}
 
-	ldns_dnssec_zone_mark_glue(zone);
-	build_zone(compressed);
+	// ensure release of the zone data
+	auto zp = std::shared_ptr<ldns_dnssec_zone>(zone, ldns_dnssec_zone_deep_free);
 
-	auto soa_rr = ldns_dnssec_name_find_rrset(zone->soa, LDNS_RR_TYPE_SOA)->rrs->rr;
-	auto serial = ldns_rdf2native_int32(ldns_rr_rdf(soa_rr, 2));
-	ldns_dnssec_zone_deep_free(zone);
+	// check the zone structure and build the zone representation
+	check_zone(zp.get());
+	ldns_dnssec_zone_mark_glue(zp.get());
+	build_zone(zp.get(), compressed);
 
+	// report the serial number
 	if (notice)  {
+		auto soa_rr = ldns_dnssec_name_find_rrset(zp->soa, LDNS_RR_TYPE_SOA)->rrs->rr;
+		auto serial = ldns_rdf2native_int32(ldns_rr_rdf(soa_rr, 2));
 		syslog(LOG_NOTICE, "root zone loaded with SOA serial %u", serial);
 	}
 

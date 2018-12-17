@@ -23,12 +23,12 @@ private:
 private:
 	PData data;
 	PAux aux;
-	ldns_dnssec_zone*	zone = nullptr;
 	bool			loaded = false;
 
 private:
-	void build_answers(PData& data, PAux& aux, const ldns_dnssec_name* name, bool compress);
-	void build_zone(bool compress);
+	void build_answers(PData& data, PAux& aux, const ldns_dnssec_zone* zone, const ldns_dnssec_name* name, bool compress);
+	void check_zone(const ldns_dnssec_zone* zone);
+	void build_zone(const ldns_dnssec_zone* zone, bool compress);
 
 public:
 	void load(const std::string& filename, bool compress, bool notice = true);
