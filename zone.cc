@@ -56,17 +56,15 @@ void Zone::check_zone(const ldns_dnssec_zone* zone)
 
 void Zone::load(const std::string& filename, bool compressed, bool notice)
 {
-	auto origin = ldns_dname_new_frm_str(".");
-	auto fp = fopen(filename.c_str(), "r");
+	auto origin = std::shared_ptr<ldns_rdf>(ldns_dname_new_frm_str("."), ldns_rdf_deep_free);
+	auto fp = ::fopen(filename.c_str(), "r");
 	if (!fp) {
 		throw_errno("opening zone file: " + filename);
 	}
 
 	ldns_dnssec_zone *zone = nullptr;
-	auto status = ldns_dnssec_zone_new_frm_fp(&zone, fp, origin, 3600, LDNS_RR_CLASS_IN);
-	fclose(fp);
-
-	ldns_rdf_deep_free(origin);
+	auto status = ldns_dnssec_zone_new_frm_fp(&zone, fp, origin.get(), 3600, LDNS_RR_CLASS_IN);
+	::fclose(fp);
 
 	if (status != LDNS_STATUS_OK || zone == nullptr) {
 		throw std::runtime_error("zone load failed");
