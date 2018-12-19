@@ -57,13 +57,6 @@ the offset for the next operation accordingly) and aliases that memory
 space into the reference variable `tx_hdr` such that subsequent writes
 to that variable's members will get written to the buffer.
 
-packet.cc, packet.h
--------------------
-
-A low-level class proving access to an `AF_PACKET` raw socket under
-Linux with reads done using a memory-mapped `PACKET_RX_RING` to
-increase performance.
-
 rrlist.cc, rrlist.h
 -------------------
 
@@ -105,7 +98,8 @@ afpacket.cc, afpacket.h
 
 Serves as an input and output layer for the network stack, receiving
 raw frames from the Linux kernel in `AF_PACKET` mode and passing them
-to the appropriate layer three protocol handler.
+to the appropriate layer-three protocol handler.  Network reads use
+a memory-mapped `PACKET_RX_RING` to increase performance.
 
 arp.cc, arp.h
 -------------
