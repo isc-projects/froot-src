@@ -24,13 +24,13 @@ all:		lightning
 
 tests:		lightbench fuzz_packet fuzz_zone
 
-lightning:	main.o server.o $(NETSERVER_OBJS) $(COMMON_OBJS)
+lightning:	main.o server.o thread.o $(NETSERVER_OBJS) $(COMMON_OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS) -lpthread
 
-fuzz_packet:	fuzz_packet.o server.o $(NETSERVER_OBJS) $(COMMON_OBJS)
+fuzz_packet:	fuzz_packet.o server.o thread.o $(NETSERVER_OBJS) $(COMMON_OBJS)
 	afl-$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS) -lpthread
 
-fuzz_zone:	fuzz_zone.o server.o $(NETSERVER_OBJS) $(COMMON_OBJS)
+fuzz_zone:	fuzz_zone.o server.o thread.o $(NETSERVER_OBJS) $(COMMON_OBJS)
 	afl-$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS) -lpthread
 
 lightbench:	 lightbench.o queryfile.o timer.o $(COMMON_OBJS)
@@ -41,6 +41,11 @@ clean:
 
 .cc.s:
 	$(CXX) -S $^ $(CXXFLAGS) $(CPPFLAGS)
+
+install:	lightning
+	/usr/bin/install -s -m 0755 lightning /usr/local/sbin
+	/usr/bin/chcon -t bin_t /usr/local/sbin/lightning
+	/usr/sbin/setcap cap_net_raw=+ep /usr/local/sbin/lightning
 
 # dependencies
 answer.o:	answer.h util.h
