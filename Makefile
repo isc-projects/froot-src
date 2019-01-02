@@ -17,23 +17,24 @@ BIN += fuzz_packet fuzz_zone lightbench
 COMMON_OBJS = context.o zone.o answer.o rrlist.o util.o
 NETSERVER_SRCS = $(wildcard netserver/*.cc)
 NETSERVER_OBJS = $(NETSERVER_SRCS:.cc=.o)
-LIBS += -lpthread -lresolv
 
 .PHONY:	all clean
 
-all: $(BIN)
+all:		lightning
+
+tests:		lightbench fuzz_packet fuzz_zone
 
 lightning:	main.o server.o $(NETSERVER_OBJS) $(COMMON_OBJS)
-	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
+	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS) -lpthread
 
 fuzz_packet:	fuzz_packet.o server.o $(NETSERVER_OBJS) $(COMMON_OBJS)
-	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
+	afl-$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS) -lpthread
 
 fuzz_zone:	fuzz_zone.o server.o $(NETSERVER_OBJS) $(COMMON_OBJS)
-	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
+	afl-$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS) -lpthread
 
 lightbench:	 lightbench.o queryfile.o timer.o $(COMMON_OBJS)
-	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
+	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS) -lresolv
 
 clean:
 	$(RM) $(BIN) *.o netserver/*.o
