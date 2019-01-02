@@ -17,15 +17,8 @@
 #include "netserver/tcp.h"
 
 #include "server.h"
+#include "thread.h"
 #include "util.h"
-
-void thread_setcpu(std::thread& t, unsigned int n)
-{
-        cpu_set_t cpu;
-        CPU_ZERO(&cpu);
-        CPU_SET(n, &cpu);
-        pthread_setaffinity_np(t.native_handle(), sizeof(cpu), &cpu);
-}
 
 void usage(int result = EXIT_FAILURE)
 {
@@ -85,7 +78,7 @@ int app(int argc, char *argv[])
 	threads = std::min(threads, max_threads);
 	threads = std::max(1U, threads);
 
-	syslog(LOG_NOTICE, "starting %d threads", threads);
+	syslog(LOG_NOTICE, "starting %d worker threads", threads);
 	std::vector<std::thread> workers(threads);
 
 	for (auto i = 0U; i < threads; ++i) {
@@ -130,6 +123,7 @@ int app(int argc, char *argv[])
 		}, i);
 
 		thread_setcpu(workers[i], i);
+		thread_setname(workers[i], "worker" + std::to_string(i));
 	}
 
 	for (auto i = 0U; i < threads; ++i) {

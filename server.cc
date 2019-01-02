@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 
 #include "netserver/tcp.h"
+#include "thread.h"
 #include "server.h"
 #include "context.h"
 #include "timer.h"
@@ -54,6 +55,7 @@ void DNSServer::loader_thread(std::string filename, bool compress)
 void DNSServer::load(const std::string& filename, bool compress)
 {
 	auto t = std::thread(&DNSServer::loader_thread, this, filename, compress);
+	thread_setname(t, "zone-loader");
 	t.detach();
 }
 
