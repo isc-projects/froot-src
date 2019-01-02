@@ -45,7 +45,6 @@ clean:
 install:	lightning
 	/usr/bin/install -s -m 0755 lightning /usr/local/sbin
 	/usr/bin/chcon -t bin_t /usr/local/sbin/lightning
-	/usr/sbin/setcap cap_net_raw=+ep /usr/local/sbin/lightning
 
 # dependencies
 answer.o:	answer.h util.h
