@@ -1,37 +1,36 @@
-UNAME := $(shell uname)
-ifeq ($(UNAME), Darwin)
-  LDNSPKG := libldns
-else
-  LDNSPKG := ldns
-  BIN := lightning
-endif
+LDNSPKG := ldns
+BIN := lightning
 
 INCS = $(shell pkg-config $(LDNSPKG) --cflags)
 LIBS = $(shell pkg-config $(LDNSPKG) --libs)
 
+LDFLAGS =
 CXXFLAGS := $(CFLAGS)
 CXXFLAGS += -O3 -g -std=c++14 -Wall -Werror -Wno-error=pragmas $(INCS)
-LDFLAGS =
+LIBS += -lpthread
 
 BIN += fuzz_packet fuzz_zone lightbench
-COMMON_OBJS = context.o zone.o answer.o rrlist.o util.o
+
+COMMON_SRCS = context.cc zone.cc answer.cc rrlist.cc util.cc
+COMMON_OBJS = $(COMMON_SRCS:.cc=.o)
+
 NETSERVER_SRCS = $(wildcard netserver/*.cc)
 NETSERVER_OBJS = $(NETSERVER_SRCS:.cc=.o)
 
-.PHONY:	all clean
+.PHONY:	all clean install
 
 all:		lightning
 
 tests:		lightbench fuzz_packet fuzz_zone
 
 lightning:	main.o server.o thread.o $(NETSERVER_OBJS) $(COMMON_OBJS)
-	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS) -lpthread
+	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
 fuzz_packet:	fuzz_packet.o server.o thread.o $(NETSERVER_OBJS) $(COMMON_OBJS)
-	afl-$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS) -lpthread
+	afl-$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
 fuzz_zone:	fuzz_zone.o server.o thread.o $(NETSERVER_OBJS) $(COMMON_OBJS)
-	afl-$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS) -lpthread
+	afl-$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
 lightbench:	 lightbench.o queryfile.o timer.o $(COMMON_OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS) -lresolv
