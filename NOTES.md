@@ -1,21 +1,24 @@
 Main Server Code
 ================
 
+src/ directory:
+---------------
+
 main.cc
 -------
 
 Handles command line arguments, creates a `Server` object and then
 starts multiple threads for handling queries.
 
-server.cc, server.h
--------------------
+server.cc
+---------
 
 The main coordination class, which receives payload frames from the
 network stack, creating a `Context` for each DNS query and subequently
 passes the entire response back to the network stack.
 
-context.cc, context.h
----------------------
+context.cc
+----------
 
 The `Context` class contains the state associated with an incoming
 query, the functions for parsing that query into that state, look-up
@@ -23,8 +26,8 @@ of the corresponding answer for the query, and subsequent collation
 of the entire response into the `iovec[]` which will be passed back
 to the network layer.
 
-answer.cc, answer.h
--------------------
+answer.cc
+---------
 
 Encapsulates a pre-computed `Answer`, and also sets of answers where
 the latter contains an answer for each specific class of response
@@ -38,8 +41,8 @@ If the QNAME is longer than this then the `data_offset_by()` method
 returns a copy of the answer with the compression pointers adjusted
 to compensate for the additional size of the Question section.
 
-buffer.h
---------
+include/buffer.h
+----------------
 
 A pair of classes (`ReadBuffer` and `WriteBuffer`) which encapsulate
 operations for sequentially reading or storing data into a memory
@@ -63,6 +66,11 @@ rrlist.cc, rrlist.h
 The `RRList` contains both a list of resource records and the RRSIGs
 associated with them.
 
+timer.cc, timer.h
+-----------------
+
+Operators for manipulating `timespec` objects.
+
 util.cc, util.h
 ---------------
 
@@ -78,7 +86,7 @@ format, and then pre-compiling an `AnswerSet` for each TLD therein.
 Network Stack
 =============
 
-NB: All code in the netserver/ directory
+NB: All code in the src/netserver/ directory
 
 netserver.cc, netserver.h
 -------------------------
@@ -149,10 +157,12 @@ short-lived TCP connections by simply sending all payload packets at
 once and ignoring any ACK packets sent by the client.  Retries are
 therefore not supported.
 
-Benchmarking Code
-=================
+Test and Benchmarking Code
+==========================
 
-benchmark.cc
+Source in tests/
+
+lightbench.cc
 ------------
 
 Loads a 10M record file of queries and tests the throughput of a
@@ -160,11 +170,11 @@ Loads a 10M record file of queries and tests the throughput of a
 this does not execute the raw IP packet handling code, just memory
 buffers containing queries and responses.
 
-timer.cc, timer.h
------------------
+benchmark.cc, benchmark.h
+-------------------------
 
-Operators for manipulating `timespec` objects, and a `BenchmarkTimer`
-class that uses scoped RAII to measure the lifetime of a block of code.
+A `BenchmarkTimer` class that uses scoped RAII to measure the runtime
+of a block of code.
 
 queryfile.cc, queryfile.h
 -------------------------

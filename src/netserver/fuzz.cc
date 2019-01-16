@@ -17,7 +17,7 @@
 #include <net/ethernet.h>
 
 #include "fuzz.h"
-#include "../util.h"
+#include "util.h"
 
 Netserver_Fuzz::Netserver_Fuzz(const std::string& filename)
 {

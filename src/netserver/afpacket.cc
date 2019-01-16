@@ -23,7 +23,7 @@
 #include <linux/if_packet.h>
 
 #include "afpacket.h"
-#include "../util.h"
+#include "util.h"
 
 Netserver_AFPacket::Netserver_AFPacket(const std::string& ifname)
 {

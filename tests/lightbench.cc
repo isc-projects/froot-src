@@ -16,7 +16,7 @@
 #include "context.h"
 #include "zone.h"
 #include "queryfile.h"
-#include "timer.h"
+#include "benchmark.h"
 
 void worker(const Zone& zone, const QueryFile& queries)
 {

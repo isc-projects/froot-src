@@ -8,29 +8,13 @@
  */
 
 /*
- * timer.h
+ * benchmark.h
  */
 
 #pragma once
 
-#include <time.h>
 #include <iostream>
 #include <string>
-
-std::ostream& operator<<(std::ostream& os, const timespec& ts);
-constexpr timespec operator-(const timespec& a, const timespec& b);
-constexpr timespec operator+(const timespec& a, const timespec& b);
-constexpr timespec operator+(const timespec& a, const uint64_t ns);
-
-constexpr inline bool operator==(const timespec& a, const timespec& b)
-{
-	return (a.tv_sec == b.tv_sec) && (a.tv_nsec == b.tv_nsec);
-}
-
-constexpr inline bool operator!=(const timespec& a, const timespec& b)
-{
-	return !(a == b);
-}
 
 class BenchmarkTimer {
 

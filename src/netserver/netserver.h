@@ -15,7 +15,7 @@
 #include <sys/socket.h>
 
 #include "checksum.h"
-#include "../buffer.h"
+#include "buffer.h"
 
 class NetserverLayer;
 
