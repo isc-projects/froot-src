@@ -33,7 +33,7 @@ void usage(int result = EXIT_FAILURE)
 {
 	using namespace std;
 
-	cout << "lightning -i <ifname> -s <ipaddr> [-f <zonefile>] [-T <threads>]" << endl;
+	cout << "froot -i <ifname> -s <ipaddr> [-f <zonefile>] [-T <threads>]" << endl;
 	cout << "  -i the network interface to listen on" << endl;
 	cout << "  -s the IP address to answer on" << endl;
 	cout << "  -p the UDP port to listen on (default: 53)" << endl;
@@ -78,7 +78,7 @@ int app(int argc, char *argv[])
 	}
 
 	// configure syslog
-	openlog("lightning", LOG_PID | LOG_CONS, LOG_DAEMON);
+	openlog("froot", LOG_PID | LOG_CONS, LOG_DAEMON);
 
 	DNSServer server;
 	server.load(zfname, compress);

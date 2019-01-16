@@ -1,11 +1,11 @@
 [Unit]
-Description=Lightning Root Zone Service
+Description=Fast Root Zone Service
 After=network.target
 
 [Service]
 User=nobody
 Type=simple
-ExecStart=/usr/local/sbin/lightning -i ens192 -s 10.1.2.40 -f /usr/local/etc/root.zone
+ExecStart=/usr/local/sbin/froot -i ens192 -s 10.1.2.40 -f /usr/local/etc/root.zone
 CapabilityBoundingSet=CAP_NET_RAW
 AmbientCapabilities=CAP_NET_RAW
 NoNewPrivileges=true

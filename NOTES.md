@@ -162,7 +162,7 @@ Test and Benchmarking Code
 
 Source in tests/
 
-lightbench.cc
+frootbench.cc
 ------------
 
 Loads a 10M record file of queries and tests the throughput of a

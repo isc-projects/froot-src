@@ -1,5 +1,5 @@
 LDNSPKG := ldns
-BIN := lightning
+BIN := froot
 
 INCS = $(shell pkg-config $(LDNSPKG) --cflags)
 LIBS = $(shell pkg-config $(LDNSPKG) --libs)
@@ -18,11 +18,11 @@ NETSERVER_OBJS = $(NETSERVER_SRCS:.cc=.o)
 
 .PHONY:	all clean install
 
-all:		lightning
+all:		froot
 
-tests:		tests/lightbench tests/fuzz_packet tests/fuzz_zone
+tests:		tests/frootbench tests/fuzz_packet tests/fuzz_zone
 
-lightning:	src/main.o src/server.o src/thread.o $(NETSERVER_OBJS) $(COMMON_OBJS)
+froot:		src/main.o src/server.o src/thread.o $(NETSERVER_OBJS) $(COMMON_OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
 tests/fuzz_packet:	tests/fuzz_packet.o src/server.o src/thread.o $(NETSERVER_OBJS) $(COMMON_OBJS)
@@ -31,7 +31,7 @@ tests/fuzz_packet:	tests/fuzz_packet.o src/server.o src/thread.o $(NETSERVER_OBJ
 tests/fuzz_zone:	tests/fuzz_zone.o src/server.o src/thread.o $(NETSERVER_OBJS) $(COMMON_OBJS)
 	afl-$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 
-tests/lightbench:	tests/lightbench.o tests/queryfile.o tests/benchmark.o $(COMMON_OBJS)
+tests/frootbench:	tests/frootbench.o tests/queryfile.o tests/benchmark.o $(COMMON_OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS) -lresolv
 
 clean:
@@ -40,13 +40,13 @@ clean:
 .cc.s:
 	$(CXX) -S $^ $(CXXFLAGS) $(CPPFLAGS)
 
-install:	lightning
-	/usr/bin/install -s -m 0755 src/lightning /usr/local/sbin
-	/usr/bin/chcon -t bin_t /usr/local/sbin/lightning
+install:	froot
+	/usr/bin/install -s -m 0755 src/froot /usr/local/sbin
+	/usr/bin/chcon -t bin_t /usr/local/sbin/froot
 
 # dependencies
 src/answer.o:		src/include/answer.h src/include/util.h
-src/lightbench.o:	src/include/context.h src/include/zone.src/include/h queryfile.h src/include/timer.h
+src/frootbench.o:	src/include/context.h src/include/zone.src/include/h queryfile.h src/include/timer.h
 src/context.o:		src/include/context.h src/include/zone.h src/include/util.h
 src/main.o:		src/include/server.h
 tests/queryfile.o:	tests/queryfile.h src/include/util.h

@@ -66,7 +66,7 @@ void usage(int result = EXIT_FAILURE)
 {
         using namespace std;
 
-        cout << "lightbench [-C] [-b <bufsize>] [-D]" << endl;
+        cout << "frootbench [-C] [-b <bufsize>] [-D]" << endl;
         cout << "  -C disable compression" << endl;
         cout << "  -U specify EDNS UDP buffer size" << endl;
         cout << "  -D send DO bit (implies EDNS)" << endl;
