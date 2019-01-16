@@ -17,14 +17,15 @@ of any kind.  Please send feedback to ray@isc.org.  Bug reports
 Features
 --------
 
-- Written in multi-threaded C++14 this code runs on everything a
-Raspberry Pi to the largest multi-core server.
-
-    - on a RPi3 B+ it has been benchmarked to run at 15,000
-       queries per second
+- Written in multi-threaded C++14 this code runs on everything from
+a Raspberry Pi to the largest multi-core server.
 
     - on higher-end servers it can saturate a 10 Gbps network
       port (~2M responses per second) using only 3 to 4 CPU cores.
+
+    - on a RPi3 B+ it has been benchmarked to run at 15,000
+      queries per second.   A single RPi should be able to
+      service dozens of recursive servers.
 
 - achieves high using Linux raw sockets in `AF_PACKET` mode to reduce
 the number of context switches and data copying operations.
@@ -49,7 +50,7 @@ Operation
 
 The server needs a regularly updated copy of the root zone to function.
 
-There is a script in ./scripts/get-root.sh that uses a zone transfer
+There is a script in `./scripts/get-root.sh` that uses a zone transfer
 message ("AXFR") from `f.root-servers.net` if the current root zone
 serial number is different to that of the file currently saved (or
 indeed if there is no file currently saved).
@@ -65,11 +66,11 @@ support (yet) for adding a standard unicast address.
 
 As far as the operating system kernel is concerned these IP addresses
 are (intentionally) invisible.  This prevents the kernel from sending
-spurious ICMP or TCP RST messages relating to network ports that it
-doesn't know about.  The server itself supports all of the required
-ARP and IPv6 Neighbor Discovery protocols necessary to announce its
-IP address(es) on the local network.  It will also respond to ICMP
-and ICMPv6 "ping" packets sent to its addresses.
+spurious ICMP or TCP RST messages relating to inbound packets sent to
+network ports that it doesn't know about.  The server itself supports
+all of the required ARP and IPv6 Neighbor Discovery protocols necessary
+to announce its IP address(es) on the local network.  It will also
+respond to ICMP and ICMPv6 "ping" packets sent to its addresses.
 
 To simplify implementation, all responses are sent to the exact same
 MAC address from which the request originated.  The O/S routing table
@@ -119,6 +120,6 @@ To act as a fully functional public facing root server the following
 additional functionality would be required:
 
 - full TCP support, optionally with AXFR service
-- support for the ".arpa" and "root-servers.net" zones
+- support for the `.arpa` and `root-servers.net` zones
 - DDoS mitigation features (e.g. RRL)
 
