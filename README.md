@@ -9,6 +9,11 @@ facing root service, but it works well as a local instance of the
 root zone that recursive resolvers can be configured to talk to in
 preference to sending queries off-net to the real root server system.
 
+NB: this is an ISC Research Project and is not covered by our support
+team.  It appears stable, and useful, but is offered without warranty
+of any kind.  Please send feedback to ray@isc.org.  Bug reports
+(unless security related) should be filed on Github.
+
 Features
 --------
 
@@ -59,10 +64,12 @@ from the range fe80::/10 using SLACC with EUI-64  but there's no
 support (yet) for adding a standard unicast address.
 
 As far as the operating system kernel is concerned these IP addresses
-are (intentionally) invisible.  The server itself supports all of
-the required ARP and IPv6 Neighbor Discovery protocols necessary
-to announce its IP address(es) on the local network.  It will also
-respond to ICMP and ICMPv6 "ping" packets sent to its addresses.
+are (intentionally) invisible.  This prevents the kernel from sending
+spurious ICMP or TCP RST messages relating to network ports that it
+doesn't know about.  The server itself supports all of the required
+ARP and IPv6 Neighbor Discovery protocols necessary to announce its
+IP address(es) on the local network.  It will also respond to ICMP
+and ICMPv6 "ping" packets sent to its addresses.
 
 To simplify implementation, all responses are sent to the exact same
 MAC address from which the request originated.  The O/S routing table
@@ -75,6 +82,15 @@ Startup
 For `systemd` based Linux distributions there is a service definition
 file in `./scripts/froot.service`.
 
+The service should not be run as root - the `systemd` script is
+configured to run with the `CAP_NET_RAW` capability to permit access
+to raw sockets without requiring any further privileges.
+
+If you are running outside of `systemd`, use the `setcap` application to
+add this capability to the application, e.g:
+
+    # setcap cap_net_raw+ep /usr/local/sbin/froot
+
 Recursive Configuration
 -----------------------
 
@@ -83,8 +99,8 @@ preference to the public root server system, configure the root zone
 in your `named.conf` file as follows:
 
     zone "." {
-	type static-stub;
-	server-addresses { x.x.x.x; 192.5.5.241; ... };
+        type static-stub;
+        server-addresses { x.x.x.x; 192.5.5.241; ... };
     };
 
 where `x.x.x.x` is the IP address assigned to this server.  With this
