@@ -1,8 +1,9 @@
-LDNSPKG := ldns
+PREFIX = /usr/local
 BIN := froot
 
-INCS = $(shell pkg-config $(LDNSPKG) --cflags)
-LIBS = $(shell pkg-config $(LDNSPKG) --libs)
+LDNSPKG := $(shell pkg-config --list-package-names | egrep '^(lib)?ldns' )
+INCS := $(shell pkg-config $(LDNSPKG) --cflags)
+LIBS := $(shell pkg-config $(LDNSPKG) --libs)
 
 LDFLAGS =
 CPPFLAGS = -iquote src/include -iquote src
@@ -41,8 +42,8 @@ clean:
 	$(CXX) -S $^ $(CXXFLAGS) $(CPPFLAGS)
 
 install:	froot
-	/usr/bin/install -s -m 0755 src/froot /usr/local/sbin
-	/usr/bin/chcon -t bin_t /usr/local/sbin/froot
+	/usr/bin/install -s -m 0755 $^ $(PREFIX)/sbin
+	/usr/bin/chcon -t bin_t $(PREFIX)/sbin/$^
 
 # dependencies
 src/answer.o:		src/include/answer.h src/include/util.h
