@@ -29,6 +29,10 @@
 #include "thread.h"
 #include "util.h"
 
+#define STRINGIFY(x) #x
+#define TO_STRING(x) STRINGIFY(x)
+static const char prefix[] = TO_STRING(PREFIX);
+
 void usage(int result = EXIT_FAILURE)
 {
 	using namespace std;
@@ -37,7 +41,7 @@ void usage(int result = EXIT_FAILURE)
 	cout << "  -i the network interface to listen on" << endl;
 	cout << "  -s the IP address to answer on" << endl;
 	cout << "  -p the UDP port to listen on (default: 53)" << endl;
-	cout << "  -f the zone file to load (default: root.zone)" << endl;
+	cout << "  -f the zone file to load (default: " << prefix << "/etc/root.zone)" << endl;
 	cout << "  -T the number of threads to run (default: ncpus)" << endl;
 
 	exit(result);
@@ -45,7 +49,7 @@ void usage(int result = EXIT_FAILURE)
 
 int app(int argc, char *argv[])
 {
-	const char *zfname = "root.zone";
+	const char *zfname = TO_STRING(PREFIX) "/etc/root.zone";
 	const char *ifname = nullptr;
 	const char *ipaddr = nullptr;
 	uint16_t port = 53;

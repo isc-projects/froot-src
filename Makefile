@@ -6,7 +6,7 @@ INCS := $(shell pkg-config $(LDNSPKG) --cflags)
 LIBS := $(shell pkg-config $(LDNSPKG) --libs)
 
 LDFLAGS =
-CPPFLAGS = -iquote src/include -iquote src
+CPPFLAGS = -iquote src/include -iquote src -DPREFIX="$(PREFIX)"
 CXXFLAGS := $(CFLAGS)
 CXXFLAGS += -O3 -g -std=c++14 -Wall -Werror $(INCS)
 LIBS += -lpthread
