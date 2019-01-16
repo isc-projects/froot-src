@@ -8,7 +8,7 @@ LIBS := $(shell pkg-config $(LDNSPKG) --libs)
 LDFLAGS =
 CPPFLAGS = -iquote src/include -iquote src
 CXXFLAGS := $(CFLAGS)
-CXXFLAGS += -O3 -g -std=c++14 -Wall -Werror -Wno-error=pragmas $(INCS)
+CXXFLAGS += -O3 -g -std=c++14 -Wall -Werror $(INCS)
 LIBS += -lpthread
 
 COMMON_SRCS = src/context.cc src/zone.cc src/answer.cc src/rrlist.cc src/timer.cc src/util.cc
