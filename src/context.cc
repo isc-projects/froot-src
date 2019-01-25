@@ -150,8 +150,9 @@ void Context::parse_edns(ReadBuffer& in)
 	has_edns = true;
 	do_bit = (flags & 0x8000);
 
+	// check for EDNS version
 	if (version > 0) {
-		rcode = 16;
+		rcode = 16;	// BADVER
 	}
 }
 
