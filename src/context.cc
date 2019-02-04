@@ -296,12 +296,15 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out, bool tcp)
 
 	// response flags
 	bool aa_bit = answer->authoritative();
-	uint16_t flags = ntohs(rx_hdr.flags);
-	flags &= 0x0110;		// copy RD + CD
-	flags |= 0x8000;		// QR
-	flags |= (rcode & 0x0f);	// set rcode
-	flags |= 0x0200 * tc_bit;	// TC bit
-	flags |= 0x0400 * aa_bit;	// AA bit
+	uint16_t o_flags = ntohs(rx_hdr.flags);
+	uint16_t flags = o_flags & 0x7800;	// copy OpCode
+	if (!flags) {				// if Query
+		flags |= (o_flags & 0x0110);	// copy RD + CD
+	}
+	flags |= 0x8000;			// QR
+	flags |= (rcode & 0x0f);		// set rcode
+	flags |= 0x0200 * tc_bit;		// TC bit
+	flags |= 0x0400 * aa_bit;		// AA bit
 	tx_hdr.flags = htons(flags);
 
 	// section counts
