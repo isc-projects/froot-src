@@ -27,8 +27,8 @@ a Raspberry Pi to the largest multi-core server.
       queries per second.   A single RPi should be able to
       service dozens of recursive servers.
 
-- achieves high using Linux raw sockets in `AF_PACKET` mode to reduce
-the number of context switches and data copying operations.
+- achieves high performance by using Linux raw sockets in `AF_PACKET`
+mode to reduce the number of context switches and data copying operations.
 
 - supports IPv4, IPv6 link local, UDP and "Stateless TCP"
 
