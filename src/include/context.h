@@ -26,9 +26,9 @@ private:
 	void parse_question(ReadBuffer& in);
 	void parse_packet(ReadBuffer& in);
 	const Answer* perform_lookup();
+	void build_response(ReadBuffer& in, const Answer* answer, std::vector<iovec>& iov);
 
 private:
-	//uint8_t			_len_buf[2];
 	uint8_t			_an_buf[4096];
 	uint8_t			_head_buf[512];
 
@@ -43,11 +43,14 @@ private:
 	uint16_t		qdstart;
 	uint16_t		qdsize;
 	uint16_t		bufsize;
+	uint16_t		rcode;
+	uint16_t		rx_id;
+	uint16_t		rx_flags;
 	uint8_t			qlabels;
 	bool			match;
 	bool			has_edns;
 	bool			do_bit;
-	uint16_t		rcode;
+	bool			tcp;
 
 public:
 	Context(const Zone& zone) : zone(zone) {};

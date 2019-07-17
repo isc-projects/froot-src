@@ -226,53 +226,8 @@ const Answer* Context::perform_lookup()
 	}
 }
 
-bool Context::execute(ReadBuffer& in, std::vector<iovec>& out, bool tcp)
+void Context::build_response(ReadBuffer& in, const Answer* answer, std::vector<iovec>& out)
 {
-	// handle TCP framing
-	if (tcp) {
-		// require and read the length word
-		if (in.available() < 2) return false;
-		auto len = ntohs(in.read<uint16_t>());
-
-		// ensure the read buffer is big enough
-		if (in.available() < len) return false;
-	}
-
-	// default answer
-	auto answer = Answer::empty;
-
-	// clear the context state
-	reset();
-
-	// minimum packet length = 12 + 1 + 2 + 2
-	if (in.available() < 17) {
-		return false;
-	}
-
-	// extract DNS header
-	auto rx_hdr = in.read<dnshdr>();
-
-	// drop if the QR bit is set
-	if (ntohs(rx_hdr.flags) & 0x8000) {
-		return false;
-	}
-
-	// point of no return - anything beyond here will generate a response
-
-	if (!valid_header(rx_hdr)) {
-		rcode = LDNS_RCODE_FORMERR;
-	} else {
-		uint8_t opcode = (ntohs(rx_hdr.flags) >> 11) & 0x0f;
-		if (opcode != LDNS_PACKET_QUERY) {
-			rcode = LDNS_RCODE_NOTIMPL;
-		} else {
-			parse_packet(in);
-			if (rcode == LDNS_RCODE_NOERROR) {
-				answer = perform_lookup();
-			}
-		}
-	}
-
 	// calculate the total length of the response packet (needed for TCP or truncation)
 	size_t total_len = sizeof(dnshdr) + qdsize + answer->size();
 	if (!has_edns) {
@@ -292,14 +247,13 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out, bool tcp)
 
 	// craft response header
 	auto& tx_hdr = head.reserve<dnshdr>();
-	tx_hdr.id = rx_hdr.id;
+	tx_hdr.id = rx_id;
 
 	// response flags
 	bool aa_bit = answer->authoritative();
-	uint16_t o_flags = ntohs(rx_hdr.flags);
-	uint16_t flags = o_flags & 0x7800;	// copy OpCode
+	uint16_t flags = rx_flags & 0x7800;	// copy OpCode
 	if (!flags) {				// if Query
-		flags |= (o_flags & 0x0110);	// copy RD + CD
+		flags |= (rx_flags & 0x0110);	// copy RD + CD
 	}
 	flags |= 0x8000;			// QR
 	flags |= (rcode & 0x0f);		// set rcode
@@ -332,6 +286,60 @@ bool Context::execute(ReadBuffer& in, std::vector<iovec>& out, bool tcp)
 	}
 
 	out.push_back(payload);
+}
+
+bool Context::execute(ReadBuffer& in, std::vector<iovec>& out, bool _tcp)
+{
+	// clear the context state
+	reset();
+
+	// handle TCP framing
+	tcp = _tcp;
+	if (tcp) {
+		// require and read the length word
+		if (in.available() < 2) return false;
+		auto len = ntohs(in.read<uint16_t>());
+
+		// ensure the read buffer is big enough
+		if (in.available() < len) return false;
+	}
+
+	// default answer
+	auto answer = Answer::empty;
+
+	// minimum packet length = 12 + 1 + 2 + 2
+	if (in.available() < 17) {
+		return false;
+	}
+
+	// extract DNS header
+	auto rx_hdr = in.read<dnshdr>();
+	rx_id = rx_hdr.id;
+	rx_flags = ntohs(rx_hdr.flags);
+
+	// drop if the QR bit is set
+	if (rx_flags & 0x8000) {
+		return false;
+	}
+
+	// point of no return - anything beyond here will generate a response
+
+	if (!valid_header(rx_hdr)) {
+		rcode = LDNS_RCODE_FORMERR;
+	} else {
+		uint8_t opcode = (rx_flags >> 11) & 0x0f;
+		if (opcode != LDNS_PACKET_QUERY) {
+			rcode = LDNS_RCODE_NOTIMPL;
+		} else {
+			parse_packet(in);
+			if (rcode == LDNS_RCODE_NOERROR) {
+				answer = perform_lookup();
+			}
+		}
+	}
+
+	// put it all together
+	build_response(in, answer, out);
 
 	return true;
 }
@@ -375,9 +383,12 @@ void Context::reset()
 	qdsize = 0;
 	bufsize = 512;
 	qlabels = 0;
+	rx_id = 0;
+	rx_flags = 0;
 	match = false;
 	has_edns = false;
 	do_bit = false;
+	tcp = false;
 	rcode = 0;
 
 	// clear buffer positions
