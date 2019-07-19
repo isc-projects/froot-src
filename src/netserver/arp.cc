@@ -16,29 +16,37 @@
 
 #include "arp.h"
 
+static bool valid_packet(arphdr& hdr)
+{
+	// we only handle requests
+	if (ntohs(hdr.ar_op) != ARPOP_REQUEST) return false;
+
+	// we only handle Ethernet
+	if (ntohs(hdr.ar_hrd) != ARPHRD_ETHER) return false;
+
+	// we only handle IPv4
+	if (ntohs(hdr.ar_pro) != ETHERTYPE_IP) return false;
+
+	// sanity check the lengths
+	if (hdr.ar_hln != 6 || hdr.ar_pln != 4) return false;
+
+	return true;
+}
+
 void Netserver_ARP::recv(NetserverPacket& p) const
 {
 	auto& in = p.readbuf;
 
-	// read fixed size ARP header
+	// read and validate fixed size ARP header
 	if (in.available() < sizeof(arphdr)) return;
 	auto hdr = in.read<arphdr>();
 
-	// we only handle requests
-	if (ntohs(hdr.ar_op) != ARPOP_REQUEST) return;
+	if (!valid_packet(hdr)) return;
 
-	// we only handle Ethernet
-	if (ntohs(hdr.ar_hrd) != ARPHRD_ETHER) return;
-
-	// we only handle IPv4
-	if (ntohs(hdr.ar_pro) != ETHERTYPE_IP) return;
-
-	// sanity check the lengths
-	if (hdr.ar_hln != 6 || hdr.ar_pln != 4) return;
-
-	// extract the remaining variable length fields
+	// check the payload length
 	if (in.available() < (2 * (hdr.ar_hln + hdr.ar_pln))) return;
 
+	// extract the remaining variable length fields
 	auto sha = in.read<ether_addr>();
 	auto spa = in.read<in_addr>();
 	(void) in.read<ether_addr>();
