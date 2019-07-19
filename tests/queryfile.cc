@@ -7,34 +7,28 @@
  *
  */
 
-#include <cstdio>
-#include <iostream>
-#include <sstream>
-#include <fstream>
-#include <stdexcept>
-#include <cerrno>
-#include <map>
 #include <algorithm>
+#include <cerrno>
+#include <cstdio>
+#include <fstream>
+#include <iostream>
+#include <map>
+#include <sstream>
+#include <stdexcept>
 
-#include <arpa/inet.h>		// for ntohs() etc
-#include <resolv.h>		// for res_mkquery()
+#include <arpa/inet.h> // for ntohs() etc
+#include <resolv.h>    // for res_mkquery()
 
 #include "queryfile.h"
 #include "util.h"
 
 static std::map<std::string, uint16_t> type_map = {
-	{ "A",		  1 },
-	{ "SOA",	  6 },
-	{ "PTR",	 12 },
-	{ "MX",		 15 },
-	{ "TXT",	 16 },
-	{ "AAAA",	 28 },
-	{ "SRV",	 33 },
+    {"A", 1}, {"SOA", 6}, {"PTR", 12}, {"MX", 15}, {"TXT", 16}, {"AAAA", 28}, {"SRV", 33},
 };
 
 static uint16_t typeNN_to_number(const std::string& type)
 {
-	size_t index;
+	size_t      index;
 	std::string num = type.substr(4, std::string::npos);
 	try {
 		unsigned long val = std::stoul(num, &index, 10);
@@ -71,12 +65,12 @@ static uint16_t type_to_number(const std::string& type, bool check_case = true)
 static QueryFile::Record make_record(const std::string& name, const std::string& type)
 {
 	QueryFile::Record record;
-	record.resize(12 + 255 + 4);	// maximum question section
+	record.resize(12 + 255 + 4); // maximum question section
 
 	uint16_t qtype = type_to_number(type);
 
-	int n = res_mkquery(0, name.c_str(), 1, qtype, nullptr, 0, nullptr,
-			    record.data(), record.size());
+	int n = res_mkquery(0, name.c_str(), 1, qtype, nullptr, 0, nullptr, record.data(),
+			    record.size());
 	if (n < 0) {
 		throw std::runtime_error("couldn't parse domain name");
 	} else {
@@ -92,19 +86,18 @@ void QueryFile::read_txt(const std::string& filename)
 		throw_errno("opening query file");
 	}
 
-	storage_t list;
+	storage_t   list;
 	std::string name, type;
-	size_t line_no = 0;
+	size_t      line_no = 0;
 
 	while (file >> name >> type) {
 		line_no++;
 
 		try {
 			list.push_back(make_record(name, type));
-		} catch (std::runtime_error &e) {
-			std::string error = "reading query file at line "
-					+ std::to_string(line_no)
-					+ ": " + e.what();
+		} catch (std::runtime_error& e) {
+			std::string error = "reading query file at line " +
+					    std::to_string(line_no) + ": " + e.what();
 			throw_errno(error);
 		}
 	}
@@ -122,12 +115,12 @@ void QueryFile::read_raw(const std::string& filename)
 	}
 
 	storage_t list;
-	uint16_t len;
+	uint16_t  len;
 
 	while (file) {
 		if (file.read(reinterpret_cast<char*>(&len), sizeof(len))) {
 
-			len = ntohs(len);		// swap to host order
+			len = ntohs(len); // swap to host order
 
 			Record record(len);
 			if (file.read(reinterpret_cast<char*>(record.data()), len)) {
@@ -148,8 +141,8 @@ void QueryFile::write_raw(const std::string& filename) const
 		throw_errno("opening query file");
 	}
 
-	for (const auto& query: queries) {
-		uint16_t len = htons(query.size());	// big-endian
+	for (const auto& query : queries) {
+		uint16_t len = htons(query.size()); // big-endian
 		file.write(reinterpret_cast<const char*>(&len), sizeof(len));
 		file.write(reinterpret_cast<const char*>(query.data()), query.size());
 	}
@@ -160,18 +153,20 @@ void QueryFile::write_raw(const std::string& filename) const
 void QueryFile::edns(const uint16_t buflen, uint16_t flags)
 {
 	std::vector<uint8_t> opt = {
-		0,					// name
-		0, 41,					// type = OPT
-		static_cast<uint8_t>(buflen >> 8),	// buflen MSB
-		static_cast<uint8_t>(buflen >> 0),	// buflen LSB
-		0,					// xrcode = 0,
-		0,					// version = 0,
-		static_cast<uint8_t>(flags >> 8),	// flags MSB
-		static_cast<uint8_t>(flags >> 0),	// flags LSB
-		0, 0					// rdlen = 0
+	    0, // name
+	    0,
+	    41,				       // type = OPT
+	    static_cast<uint8_t>(buflen >> 8), // buflen MSB
+	    static_cast<uint8_t>(buflen >> 0), // buflen LSB
+	    0,				       // xrcode = 0,
+	    0,				       // version = 0,
+	    static_cast<uint8_t>(flags >> 8),  // flags MSB
+	    static_cast<uint8_t>(flags >> 0),  // flags LSB
+	    0,
+	    0 // rdlen = 0
 	};
 
-	for (auto& query: queries) {
+	for (auto& query : queries) {
 
 		// adjust ARCOUNT
 		auto* p = reinterpret_cast<uint16_t*>(query.data());

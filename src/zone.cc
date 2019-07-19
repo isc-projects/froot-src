@@ -7,23 +7,24 @@
  *
  */
 
+#include <atomic>
 #include <iostream>
 #include <stdexcept>
-#include <atomic>
 
-#include <syslog.h>
 #include <arpa/inet.h>
+#include <syslog.h>
 
 #include <ldns/ldns.h>
 
-#include "zone.h"
 #include "util.h"
+#include "zone.h"
 
-void Zone::build_answers(PData& data, PAux& aux, const ldns_dnssec_zone* zone, const ldns_dnssec_name* name, bool compressed)
+void Zone::build_answers(PData& data, PAux& aux, const ldns_dnssec_zone* zone,
+			 const ldns_dnssec_name* name, bool compressed)
 {
-	auto owner = name->name;
-	auto rdata = ldns_rdf_data(owner);
-	auto len = rdata[0];
+	auto	owner = name->name;
+	auto	rdata = ldns_rdf_data(owner);
+	auto	len = rdata[0];
 	std::string key = strlower(rdata + 1, len);
 
 	auto nd = std::make_shared<AnswerSet>(name, zone, compressed);
@@ -34,13 +35,13 @@ void Zone::build_answers(PData& data, PAux& aux, const ldns_dnssec_zone* zone, c
 void Zone::build_zone(const ldns_dnssec_zone* zone, bool compressed)
 {
 	PData new_data = std::make_shared<Data>();
-	PAux new_aux = std::make_shared<Aux>();
+	PAux  new_aux = std::make_shared<Aux>();
 
 	auto node = ldns_rbtree_first(zone->names);
 	while (node != LDNS_RBTREE_NULL) {
 		// can be const in later versions of ldns
-		auto tmp = reinterpret_cast<const ldns_dnssec_name *>(node->data);
-		auto name = const_cast<ldns_dnssec_name *>(tmp);
+		auto tmp = reinterpret_cast<const ldns_dnssec_name*>(node->data);
+		auto name = const_cast<ldns_dnssec_name*>(tmp);
 
 		if (!ldns_dnssec_name_is_glue(name)) {
 			build_answers(new_data, new_aux, zone, name, compressed);
@@ -71,7 +72,7 @@ void Zone::load(const std::string& filename, bool compressed, bool notice)
 		throw_errno("opening zone file: " + filename);
 	}
 
-	ldns_dnssec_zone *zone = nullptr;
+	ldns_dnssec_zone* zone = nullptr;
 	auto status = ldns_dnssec_zone_new_frm_fp(&zone, fp, origin.get(), 3600, LDNS_RR_CLASS_IN);
 	::fclose(fp);
 
@@ -88,7 +89,7 @@ void Zone::load(const std::string& filename, bool compressed, bool notice)
 	build_zone(zp.get(), compressed);
 
 	// report the serial number
-	if (notice)  {
+	if (notice) {
 		auto soa_rr = ldns_dnssec_name_find_rrset(zp->soa, LDNS_RR_TYPE_SOA)->rrs->rr;
 		auto serial = ldns_rdf2native_int32(ldns_rr_rdf(soa_rr, 2));
 		syslog(LOG_NOTICE, "root zone loaded with SOA serial %u", serial);

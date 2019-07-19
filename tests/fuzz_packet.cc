@@ -11,17 +11,17 @@
 #include <iostream>
 #include <vector>
 
-#include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
 
+#include "netserver/arp.h"
 #include "netserver/fuzz.h"
-#include "netserver/ipv4.h"
-#include "netserver/ipv6.h"
 #include "netserver/icmp.h"
 #include "netserver/icmpv6.h"
-#include "netserver/arp.h"
-#include "netserver/udp.h"
+#include "netserver/ipv4.h"
+#include "netserver/ipv6.h"
 #include "netserver/tcp.h"
+#include "netserver/udp.h"
 
 #include "server.h"
 #include "util.h"
@@ -39,24 +39,24 @@ void usage(int result = EXIT_FAILURE)
 	exit(result);
 }
 
-int app(int argc, char *argv[])
+int app(int argc, char* argv[])
 {
-	const char *zfname = "root.zone";
-	const char *ifile = nullptr;
-	const char *ipaddr = nullptr;
-	uint16_t port = 53;
-	auto compress = true;
+	const char* zfname = "root.zone";
+	const char* ifile = nullptr;
+	const char* ipaddr = nullptr;
+	uint16_t    port = 53;
+	auto	compress = true;
 
 	int opt;
 	while ((opt = getopt(argc, argv, "i:f:s:p:Ch")) != -1) {
 		switch (opt) {
-			case 'i': ifile = optarg; break;
-			case 'f': zfname = optarg; break;
-			case 's': ipaddr = optarg; break;
-			case 'p': port = atoi(optarg); break;
-			case 'C': compress = false; break;
-			case 'h': usage(EXIT_SUCCESS);
-			default: usage();
+		case 'i': ifile = optarg; break;
+		case 'f': zfname = optarg; break;
+		case 's': ipaddr = optarg; break;
+		case 'p': port = atoi(optarg); break;
+		case 'C': compress = false; break;
+		case 'h': usage(EXIT_SUCCESS);
+		default: usage();
 		}
 	}
 
@@ -73,14 +73,14 @@ int app(int argc, char *argv[])
 	DNSServer server;
 	server.load_sync(zfname, compress);
 
-	ether_addr hwaddr( { 0x00,0x0c,0x29,0xda,0x75,0x9f } );
+	ether_addr hwaddr({0x00, 0x0c, 0x29, 0xda, 0x75, 0x9f});
 
 	auto raw = Netserver_Fuzz(ifile);
 	auto arp = Netserver_ARP(hwaddr, host);
 
 	const in6_addr ll = Netserver_IPv6::ether_to_link_local(hwaddr);
-	auto ipv6 = Netserver_IPv6({ ll });
-	auto ipv4 = Netserver_IPv4(host);
+	auto	   ipv6 = Netserver_IPv6({ll});
+	auto	   ipv4 = Netserver_IPv4(host);
 
 	auto icmp4 = Netserver_ICMP();
 	auto icmp6 = Netserver_ICMPv6(hwaddr);
@@ -109,7 +109,7 @@ int app(int argc, char *argv[])
 	return 0;
 }
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
 	return app(argc, argv);
 }

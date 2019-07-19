@@ -7,9 +7,9 @@
  *
  */
 
-#include <string>
 #include <arpa/inet.h>
 #include <ldns/ldns.h>
+#include <string>
 
 #include "answer.h"
 #include "util.h"
@@ -60,8 +60,8 @@ void Answer::put_name_pointer(const ldns_rdf* name, uint16_t offset)
 
 uint16_t Answer::get_name_pointer(const ldns_rdf* name) const
 {
-	auto clone = ldns_rdf_clone(name);
-	auto ptr = RDFPtr(clone, ldns_rdf_deep_free);
+	auto	clone = ldns_rdf_clone(name);
+	auto	ptr = RDFPtr(clone, ldns_rdf_deep_free);
 	const auto& iter = c_table.find(ptr);
 	if (iter != c_table.end()) {
 		return iter->second;
@@ -97,7 +97,7 @@ void Answer::dname_to_wire(ldns_buffer* lbuf, const ldns_rdf* name)
 	// offset based on the assumed minimum question section size
 	uint16_t pos = ldns_buffer_position(lbuf);
 	uint16_t real_pos = pos + 12 + fix_offset;
-	if (real_pos < (16384 - 255))  {	// room for question section
+	if (real_pos < (16384 - 255)) { // room for question section
 		put_name_pointer(name, real_pos);
 	}
 
@@ -151,7 +151,7 @@ size_t Answer::rrlist_to_wire(ldns_buffer* lbuf, const RRList& rrs)
 {
 	size_t n = 0;
 
-	for (const auto& rrp: rrs.list()) {
+	for (const auto& rrp : rrs.list()) {
 		auto rr = rrp.get();
 		if (ldns_rr_get_type(rr) == LDNS_RR_TYPE_RRSIG) {
 			if (flags & Flags::dnssec) {
@@ -173,7 +173,7 @@ iovec Answer::data_offset_by(uint16_t offset, uint8_t* out) const
 	// or no compression data actually found
 	// - use pre-computer answer directly
 	if (!compressed() || (offset == fix_offset) || c_offsets.size() == 0) {
-		return iovec { buf, _size };
+		return iovec{buf, _size};
 	}
 
 	// adjust offset to account for excess
@@ -188,16 +188,17 @@ iovec Answer::data_offset_by(uint16_t offset, uint8_t* out) const
 	}
 
 	// adjust compression pointers
-	for (auto n: c_offsets) {
+	for (auto n : c_offsets) {
 		auto& p = *reinterpret_cast<uint16_t*>(out + n);
 		p = htons(ntohs(p) + offset);
 	}
 
-	return iovec { out, _size };
+	return iovec{out, _size};
 }
 
-Answer::Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const RRList& ar, Flags flags)
-	: flags(flags)
+Answer::Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const RRList& ar,
+	       Flags flags)
+    : flags(flags)
 {
 	// calculate likely size of response sections and pre-fill
 	// the compression table with the TLD in the question section
@@ -211,11 +212,11 @@ Answer::Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const R
 	}
 
 	size_t n = 4096;
-	auto lbuf = ldns_buffer_new(n);
+	auto   lbuf = ldns_buffer_new(n);
 
 	ancount = rrlist_to_wire(lbuf, an);
 	nscount = rrlist_to_wire(lbuf, ns);
-	arcount = rrlist_to_wire(lbuf, ar) + 1;	// EDNS record too
+	arcount = rrlist_to_wire(lbuf, ar) + 1; // EDNS record too
 
 	// compression table no longer needed
 	c_table.clear();
@@ -229,7 +230,7 @@ Answer::Answer(const ldns_rdf* name, const RRList& an, const RRList& ns, const R
 
 	// populate the EDNS OPT RR
 	auto& opt = *reinterpret_cast<edns_opt_rr*>(buf + lbsize);
-	opt.name = 0;           // "."
+	opt.name = 0; // "."
 	opt.type = htons(LDNS_RR_TYPE_OPT);
 	opt.bufsize = htons(1480);
 	opt.ercode = 0;
@@ -299,7 +300,7 @@ void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone, bool compres
 	nsec.append(name->nsec);
 	nsec.append(name->nsec_signatures);
 
-	auto ns_rrl = ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_NS);
+	auto   ns_rrl = ldns_dnssec_name_find_rrset(name, LDNS_RR_TYPE_NS);
 	RRList glue = find_glue(ns_rrl, zone);
 
 	// unsigned authoritative answers
@@ -315,14 +316,18 @@ void AnswerSet::generate_root_answers(const ldns_dnssec_zone* zone, bool compres
 	dnssec[Answer::Type::root_ns] = new Answer(owner, ns, empty, glue, flags);
 	dnssec[Answer::Type::root_dnskey] = new Answer(owner, dnskey, empty, empty, flags);
 	dnssec[Answer::Type::root_nsec] = new Answer(owner, nsec, ns, glue, flags);
-	dnssec[Answer::Type::root_nodata] = new Answer(owner, empty, soa, empty, flags | nc);	// not compressed
+	dnssec[Answer::Type::root_nodata] =
+	    new Answer(owner, empty, soa, empty, flags | nc); // not compressed
 
 	// query for '. ANY' always contains NS, NSEC, DNSKEY, RRSIGs etc
-	plain[Answer::Type::root_any] = new Answer(owner, soa + ns + nsec + dnskey, empty, glue, flags);
-	dnssec[Answer::Type::root_any] = new Answer(owner, soa + ns + nsec + dnskey, empty, glue, flags);
+	plain[Answer::Type::root_any] =
+	    new Answer(owner, soa + ns + nsec + dnskey, empty, glue, flags);
+	dnssec[Answer::Type::root_any] =
+	    new Answer(owner, soa + ns + nsec + dnskey, empty, glue, flags);
 }
 
-void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone, bool compress)
+void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone,
+				     bool compress)
 {
 	const auto nc = Answer::Flags::nocompress;
 	const auto auth = Answer::Flags::auth;
@@ -343,7 +348,7 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 	RRList ds(ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_DS));
 
 	// fill out glue
-	auto ns_rrl = ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_NS);
+	auto   ns_rrl = ldns_dnssec_name_find_rrset(_name, LDNS_RR_TYPE_NS);
 	RRList glue = find_glue(ns_rrl, zone);
 
 	// create unsigned answers
@@ -353,7 +358,8 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 		plain[Answer::Type::tld_ds] = new Answer(owner, empty, soa, empty, flags | auth);
 	}
 	plain[Answer::Type::tld_referral] = new Answer(owner, empty, ns, glue, flags);
-	plain[Answer::Type::nxdomain] = new Answer(owner, empty, soa, empty, flags | auth | nc);  // not compressed
+	plain[Answer::Type::nxdomain] =
+	    new Answer(owner, empty, soa, empty, flags | auth | nc); // not compressed
 
 	// create signed answers
 	flags |= Answer::Flags::dnssec;
@@ -367,7 +373,8 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 	if (ds.count()) {
 		dnssec[Answer::Type::tld_ds] = new Answer(owner, ds, empty, empty, flags | auth);
 	} else {
-		dnssec[Answer::Type::tld_ds] = new Answer(owner, empty, signed_soa, empty, flags | auth);
+		dnssec[Answer::Type::tld_ds] =
+		    new Answer(owner, empty, signed_soa, empty, flags | auth);
 	}
 	dnssec[Answer::Type::tld_referral] = new Answer(owner, empty, ns + ds, glue, flags);
 
@@ -377,10 +384,11 @@ void AnswerSet::generate_tld_answers(const ldns_dnssec_name* name, const ldns_dn
 		signed_soa.append(zone->soa->nsec_signatures);
 	}
 
-	dnssec[Answer::Type::nxdomain] = new Answer(owner, empty, signed_soa, empty, flags | auth | nc); // not compressed
+	dnssec[Answer::Type::nxdomain] =
+	    new Answer(owner, empty, signed_soa, empty, flags | auth | nc); // not compressed
 }
 
-AnswerSet::AnswerSet(const ldns_dnssec_name* name, const ldns_dnssec_zone *zone, bool compressed)
+AnswerSet::AnswerSet(const ldns_dnssec_name* name, const ldns_dnssec_zone* zone, bool compressed)
 {
 	plain = new Answer*[Answer::Type::max];
 	dnssec = new Answer*[Answer::Type::max];

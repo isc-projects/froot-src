@@ -7,8 +7,8 @@
  *
  */
 
-#include <iomanip>
 #include "timer.h"
+#include <iomanip>
 
 static const long ns_per_s = 1000000000UL;
 
@@ -24,12 +24,12 @@ std::ostream& operator<<(std::ostream& os, const timespec& ts)
 
 timespec operator-(const timespec& a, const timespec& b)
 {
-	timespec res = { 0 };
+	timespec res = {0};
 
 	if (a.tv_nsec < b.tv_nsec) {
 		res.tv_sec = a.tv_sec - b.tv_sec - 1;
 		res.tv_nsec = ns_per_s + a.tv_nsec - b.tv_nsec;
-	}  else {
+	} else {
 		res.tv_sec = a.tv_sec - b.tv_sec;
 		res.tv_nsec = a.tv_nsec - b.tv_nsec;
 	}
@@ -39,7 +39,7 @@ timespec operator-(const timespec& a, const timespec& b)
 
 timespec operator+(const timespec& a, const timespec& b)
 {
-	timespec res = { 0 };
+	timespec res = {0};
 
 	res.tv_sec = a.tv_sec + b.tv_sec;
 	res.tv_nsec = a.tv_nsec + b.tv_nsec;
@@ -53,7 +53,8 @@ timespec operator+(const timespec& a, const timespec& b)
 
 timespec operator+(const timespec& a, const uint64_t ns)
 {
-	auto div = ldiv(ns, ns_per_s);
-	timespec delta = { div.quot, div.rem };;
+	auto     div = ldiv(ns, ns_per_s);
+	timespec delta = {div.quot, div.rem};
+
 	return a + delta;
 }

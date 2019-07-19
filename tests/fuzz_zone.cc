@@ -10,8 +10,8 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "zone.h"
 #include "util.h"
+#include "zone.h"
 
 void usage(int result = EXIT_FAILURE)
 {
@@ -22,18 +22,18 @@ void usage(int result = EXIT_FAILURE)
 	exit(result);
 }
 
-int app(int argc, char *argv[])
+int app(int argc, char* argv[])
 {
-	const char *zfname = "root.zone";
-	bool compress = true;
+	const char* zfname = "root.zone";
+	bool	compress = true;
 
 	int opt;
 	while ((opt = getopt(argc, argv, "f:Ch")) != -1) {
 		switch (opt) {
-			case 'f': zfname = optarg; break;
-			case 'C': compress = false; break;
-			case 'h': usage(EXIT_SUCCESS);
-			default: usage();
+		case 'f': zfname = optarg; break;
+		case 'C': compress = false; break;
+		case 'h': usage(EXIT_SUCCESS);
+		default: usage();
 		}
 	}
 
@@ -51,7 +51,7 @@ int app(int argc, char *argv[])
 	return 0;
 }
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
 	return app(argc, argv);
 }

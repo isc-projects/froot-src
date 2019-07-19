@@ -20,10 +20,7 @@
 static size_t payload_length(const std::vector<iovec>& iov)
 {
 	return std::accumulate(iov.cbegin() + 1, iov.cend(), 0U,
-		[](size_t a, const iovec& b) {
-			return a + b.iov_len;
-		}
-	);
+			       [](size_t a, const iovec& b) { return a + b.iov_len; });
 }
 
 void Netserver_UDP::recv(NetserverPacket& p) const
@@ -50,23 +47,23 @@ void Netserver_UDP::recv(NetserverPacket& p) const
 	udp_out.uh_ulen = 0;
 
 	// iovecs for sending data
-	p.push(iovec { &udp_out, sizeof udp_out });
+	p.push(iovec{&udp_out, sizeof udp_out});
 
 	dispatch(p, proto);
 }
 
 void Netserver_UDP::send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen) const
 {
-	auto& udp_out = *reinterpret_cast<udphdr*>(iovs[1].iov_base);	// FIXME
+	auto& udp_out = *reinterpret_cast<udphdr*>(iovs[1].iov_base); // FIXME
 
 	uint16_t len = payload_length(iovs);
 
 	udp_out.uh_ulen = htons(len);
 
-        // optionally update checksum with the UCP header and other payload data
+	// optionally update checksum with the UCP header and other payload data
 	if (p.l3 == ETHERTYPE_IPV6) {
 		auto crc = p.crc;
-		crc.add(len);		// add payload length to the pseudo-header
+		crc.add(len); // add payload length to the pseudo-header
 
 		udp_out.uh_sum = 0;
 		for (auto iter = iovs.cbegin() + 1; iter != iovs.cend(); ++iter) {

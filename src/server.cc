@@ -12,10 +12,10 @@
 
 #include <sys/stat.h>
 
-#include "netserver/tcp.h"
-#include "thread.h"
-#include "server.h"
 #include "context.h"
+#include "netserver/tcp.h"
+#include "server.h"
+#include "thread.h"
 #include "timer.h"
 #include "util.h"
 
@@ -26,11 +26,11 @@ void DNSServer::recv(NetserverPacket& p) const
 	bool tcp = (p.l4 == IPPROTO_TCP);
 
 	Context ctx(zone);
-	auto reply = ctx.execute(p.readbuf, p.iovs, tcp);
+	auto    reply = ctx.execute(p.readbuf, p.iovs, tcp);
 
 	// consume the rest of the inbound TCP segment so it can be ACK'd.
 	if (tcp) {
-		(void) p.readbuf.read<uint8_t>(p.readbuf.available());
+		(void)p.readbuf.read<uint8_t>(p.readbuf.available());
 	}
 
 	if (reply) {
@@ -42,9 +42,9 @@ void DNSServer::recv(NetserverPacket& p) const
 
 void DNSServer::loader_thread(std::string filename, bool compress)
 {
-	timespec mtim = { 0, 0 };
+	timespec    mtim = {0, 0};
 	struct stat st;
-	bool first = true;
+	bool	first = true;
 
 	while (true) {
 		int res = ::stat(filename.c_str(), &st);

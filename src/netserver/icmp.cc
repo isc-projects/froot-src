@@ -9,8 +9,8 @@
 
 #include <netinet/ip_icmp.h>
 
-#include "icmp.h"
 #include "checksum.h"
+#include "icmp.h"
 
 void Netserver_ICMP::recv(NetserverPacket& p) const
 {
@@ -27,7 +27,7 @@ void Netserver_ICMP::recv(NetserverPacket& p) const
 	if (hdr.code != 0) return;
 
 	// use the copy of the header to generate the response
-	p.push(iovec { &hdr, sizeof hdr });
+	p.push(iovec{&hdr, sizeof hdr});
 	hdr.type = ICMP_ECHOREPLY;
 	hdr.checksum = 0;
 
@@ -37,8 +37,8 @@ void Netserver_ICMP::recv(NetserverPacket& p) const
 
 	// use the remaining data in the read buffer as payload
 	size_t n = in.available();
-	auto payload = const_cast<uint8_t*>(in.read<uint8_t>(n));
-	p.push(iovec { payload, n} );
+	auto   payload = const_cast<uint8_t*>(in.read<uint8_t>(n));
+	p.push(iovec{payload, n});
 
 	// update the checksum
 	crc.add(payload, n);

@@ -7,23 +7,22 @@
  *
  */
 
-#include <cstring>
-#include <vector>
-#include <random>
 #include <chrono>
+#include <cstring>
+#include <random>
+#include <vector>
 
 #include <arpa/inet.h>
 #include <netinet/ip.h>
 
-#include "ipv4.h"
 #include "checksum.h"
+#include "ipv4.h"
 
-void Netserver_IPv4::send_fragment(NetserverPacket& p,
-	uint16_t offset, uint16_t chunk,
-	const std::vector<iovec>& iovs, size_t iovlen, bool mf) const
+void Netserver_IPv4::send_fragment(NetserverPacket& p, uint16_t offset, uint16_t chunk,
+				   const std::vector<iovec>& iovs, size_t iovlen, bool mf) const
 {
 	// calculate offsets and populate IP header
-	auto& ip = *reinterpret_cast<struct ip*>(iovs[0].iov_base);	// TODO: offset 0
+	auto& ip = *reinterpret_cast<struct ip*>(iovs[0].iov_base); // TODO: offset 0
 	ip.ip_len = htons(chunk + sizeof ip);
 	ip.ip_off = htons((mf << 13) | (offset >> 3));
 	ip.ip_sum = 0;
@@ -37,10 +36,12 @@ void Netserver_IPv4::send_fragment(NetserverPacket& p,
 	}
 }
 
-void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen) const
+void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
+			  size_t iovlen) const
 {
 	// thread local RNG for generating IP IDs
-	thread_local auto rnd = std::mt19937(std::chrono::system_clock::now().time_since_epoch().count() + 1);
+	thread_local auto rnd =
+	    std::mt19937(std::chrono::system_clock::now().time_since_epoch().count() + 1);
 
 	// copy vectors because we're going to modify them
 	auto iovs = iovs_in;
@@ -50,7 +51,7 @@ void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 	ip.ip_id = rnd();
 
 	// determine maximum payload fragment size
-	auto mtu = 1500;			// TODO: s.getmtu();
+	auto mtu = 1500; // TODO: s.getmtu();
 	auto max_frag = mtu - sizeof(struct ip);
 
 	// state variables
@@ -61,8 +62,8 @@ void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 	while (iter != iovs.end()) {
 
 		auto& vec = *iter++;
-		auto base = reinterpret_cast<uint8_t*>(vec.iov_base);
-		auto len = vec.iov_len;
+		auto  base = reinterpret_cast<uint8_t*>(vec.iov_base);
+		auto  len = vec.iov_len;
 		chunk += len;
 
 		// did we take too much?
@@ -82,7 +83,7 @@ void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 
 			// and insert a new iovec after this one that holds the left-overs
 			// assignment necessary in case old iterator is invalidated
-			iter = iovs.insert(iter, iovec { base + vec.iov_len, len - vec.iov_len});
+			iter = iovs.insert(iter, iovec{base + vec.iov_len, len - vec.iov_len});
 
 			// send fragment (with MF bit)
 			send_fragment(p, offset, chunk, iovs, iter - iovs.begin(), true);
@@ -103,7 +104,7 @@ void Netserver_IPv4::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 void Netserver_IPv4::recv(NetserverPacket& p) const
 {
 	ReadBuffer& in = p.readbuf;
-	auto start_pos = in.position();	// for AF_PACKET bug below
+	auto	start_pos = in.position(); // for AF_PACKET bug below
 
 	// extract L3 header
 	if (in.available() < sizeof(struct ip)) return;
@@ -117,7 +118,7 @@ void Netserver_IPv4::recv(NetserverPacket& p) const
 	// skip IP options
 	size_t optl = ihl - sizeof ip4_in;
 	if (in.available() < optl) return;
-	(void) in.read<uint8_t>(optl);
+	(void)in.read<uint8_t>(optl);
 
 	// check it's a registered protocol
 	if (!registered(ip4_in.ip_p)) return;
@@ -134,7 +135,7 @@ void Netserver_IPv4::recv(NetserverPacket& p) const
 		if (len < 46) {
 			if (len < pos) return;
 			in = ReadBuffer(&in[0], len);
-			(void) in.read<uint8_t>(pos);
+			(void)in.read<uint8_t>(pos);
 		}
 	}
 
@@ -150,7 +151,7 @@ void Netserver_IPv4::recv(NetserverPacket& p) const
 	ip4_out.ip_sum = 0;
 	ip4_out.ip_src = ip4_in.ip_dst;
 	ip4_out.ip_dst = ip4_in.ip_src;
-	p.push(iovec { &ip4_out, sizeof ip4_out } );
+	p.push(iovec{&ip4_out, sizeof ip4_out});
 
 	// IPv4 pseudo-header
 	p.crc.add(&ip4_in.ip_src, sizeof(in_addr));

@@ -11,17 +11,17 @@
 #include <iostream>
 #include <map>
 
-#include <unistd.h>	// for getopt
+#include <unistd.h> // for getopt
 
-#include "context.h"
-#include "zone.h"
-#include "queryfile.h"
 #include "benchmark.h"
+#include "context.h"
+#include "queryfile.h"
+#include "zone.h"
 
 void worker(const Zone& zone, const QueryFile& queries)
 {
 	std::map<uint16_t, uint64_t> rcode_count;
-	std::map<bool, uint64_t> tc_count;
+	std::map<bool, uint64_t>     tc_count;
 
 	{
 		Context ctx(zone);
@@ -33,11 +33,11 @@ void worker(const Zone& zone, const QueryFile& queries)
 		for (size_t n = 0; n < 10; ++n) {
 			for (size_t i = 0; i < 1e7; ++i) {
 
-				auto& q = queries[i];
-				ReadBuffer in { q.data(), q.size() };
+				auto&      q = queries[i];
+				ReadBuffer in{q.data(), q.size()};
 				iov.clear();
 
-				(void) ctx.execute(in, iov);
+				(void)ctx.execute(in, iov);
 				if (iov.size() >= 1) {
 
 					auto p = reinterpret_cast<uint8_t*>(iov[0].iov_base);
@@ -47,60 +47,62 @@ void worker(const Zone& zone, const QueryFile& queries)
 
 					++rcode_count[rcode];
 					++tc_count[tc];
-
 				}
 			}
 		}
 	}
 
-	for (const auto it: rcode_count) {
+	for (const auto it : rcode_count) {
 		std::cerr << "rcode " << it.first << " : " << it.second << std::endl;
 	}
 
-	for (const auto it: tc_count) {
+	for (const auto it : tc_count) {
 		std::cerr << "tc " << it.first << " : " << it.second << std::endl;
 	}
 }
 
 void usage(int result = EXIT_FAILURE)
 {
-        using namespace std;
+	using namespace std;
 
-        cout << "frootbench [-C] [-b <bufsize>] [-D]" << endl;
-        cout << "  -C disable compression" << endl;
-        cout << "  -U specify EDNS UDP buffer size" << endl;
-        cout << "  -D send DO bit (implies EDNS)" << endl;
+	cout << "frootbench [-C] [-b <bufsize>] [-D]" << endl;
+	cout << "  -C disable compression" << endl;
+	cout << "  -U specify EDNS UDP buffer size" << endl;
+	cout << "  -D send DO bit (implies EDNS)" << endl;
 
-        exit(result);
+	exit(result);
 }
 
-int app(int argc, char *argv[])
+int app(int argc, char* argv[])
 {
-        bool compress = true;
-	bool edns = false;
-	bool do_bit = false;
+	bool     compress = true;
+	bool     edns = false;
+	bool     do_bit = false;
 	uint16_t bufsize = 0;
 
 	int opt;
 	while ((opt = getopt(argc, argv, "CU:Xh")) != -1) {
-                switch (opt) {
-                        case 'C': compress = false; break;
-			case 'U': bufsize = atoi(optarg); edns = true; break;
-			case 'X': do_bit = true; break;
-                        case 'h': usage(EXIT_SUCCESS);
-                        default: usage();
-                }
+		switch (opt) {
+		case 'C': compress = false; break;
+		case 'U':
+			bufsize = atoi(optarg);
+			edns = true;
+			break;
+		case 'X': do_bit = true; break;
+		case 'h': usage(EXIT_SUCCESS);
+		default: usage();
+		}
 	}
 
-        if (optind < argc) {
-                usage();
-        }
+	if (optind < argc) {
+		usage();
+	}
 
 	if (bufsize < 512) {
 		bufsize = 512;
 	}
 
-	Zone zone;
+	Zone      zone;
 	QueryFile queries;
 
 	{
@@ -123,7 +125,7 @@ int app(int argc, char *argv[])
 	return 0;
 }
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
 	try {
 		return app(argc, argv);

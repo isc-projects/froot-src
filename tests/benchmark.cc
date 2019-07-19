@@ -7,10 +7,10 @@
  *
  */
 
-#include <iostream>
-#include <iomanip>
 #include "benchmark.h"
 #include "timer.h"
+#include <iomanip>
+#include <iostream>
 
 uint64_t BenchmarkTimer::current_id = 0;
 

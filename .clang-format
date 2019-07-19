@@ -1,0 +1,12 @@
+BasedOnStyle: LLVM
+IndentWidth: 8
+ColumnLimit: 100
+UseTab: Always
+AccessModifierOffset: -8
+AlignTrailingComments: true
+AlignConsecutiveDeclarations: true
+AllowShortFunctionsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortIfStatementsOnASingleLine: true
+BreakBeforeBraces: WebKit
+PointerAlignment: Left

@@ -9,8 +9,8 @@
 
 #pragma once
 
-#include <netinet/in.h>
 #include <net/ethernet.h>
+#include <netinet/in.h>
 
 #include "netserver.h"
 
@@ -26,11 +26,11 @@ private:
 public:
 	Netserver_ICMPv6(const ether_addr& ether /*, const in6_addr& ipv6 */);
 
-	void attach(NetserverLayer& parent) {
+	void attach(NetserverLayer& parent)
+	{
 		NetserverLayer::attach(parent, IPPROTO_ICMPV6);
 	}
 
 public:
-	void recv(NetserverPacket &p) const override;
-
+	void recv(NetserverPacket& p) const override;
 };

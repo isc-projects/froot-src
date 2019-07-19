@@ -18,21 +18,20 @@
 
 class BenchmarkTimer {
 
-	static uint64_t		current_id;
+	static uint64_t current_id;
 
-	std::string		name;
-	uint64_t		timer_id;
-	clockid_t		clock_id;
-	timespec		start;
+	std::string name;
+	uint64_t    timer_id;
+	clockid_t   clock_id;
+	timespec    start;
 
 public:
 	BenchmarkTimer(const std::string& name, clockid_t clock_id = CLOCK_PROCESS_CPUTIME_ID);
 	~BenchmarkTimer();
 
 public:
-	timespec		elapsed() const;
-	std::ostream&		write(std::ostream&) const;
-
+	timespec      elapsed() const;
+	std::ostream& write(std::ostream&) const;
 };
 
 std::ostream& operator<<(std::ostream&, const BenchmarkTimer&);

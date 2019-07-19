@@ -11,11 +11,11 @@
 #include <iostream>
 #include <stdexcept>
 
-#include <unistd.h>
-#include <syslog.h>
 #include <sys/ioctl.h>
-#include <sys/socket.h>
 #include <sys/mman.h>
+#include <sys/socket.h>
+#include <syslog.h>
+#include <unistd.h>
 
 #include <arpa/inet.h>
 #include <linux/if.h>
@@ -31,7 +31,7 @@ Netserver_AFPacket::Netserver_AFPacket(const std::string& ifname)
 	if (fd < 0) {
 		throw_errno("socket(AF_PACKET, SOCK_DGRAM)");
 	}
-	pfd = { fd, POLLIN, 0 };
+	pfd = {fd, POLLIN, 0};
 
 	bind(ifname);
 	rxring(11, 128);
@@ -40,7 +40,7 @@ Netserver_AFPacket::Netserver_AFPacket(const std::string& ifname)
 void Netserver_AFPacket::bind(const std::string& ifname)
 {
 	ifreq ifr;
-	auto n = ifname.copy(ifr.ifr_name, IFNAMSIZ);
+	auto  n = ifname.copy(ifr.ifr_name, IFNAMSIZ);
 	if (n < IFNAMSIZ) {
 		ifr.ifr_name[n] = '\0';
 	}
@@ -64,16 +64,18 @@ void Netserver_AFPacket::bind(const std::string& ifname)
 	ifindex = ifr.ifr_ifindex;
 
 	// bind the AF_PACKET socket to the specified interface
-	sockaddr_ll saddr = { 0, };
+	sockaddr_ll saddr = {
+	    0,
+	};
 	saddr.sll_family = AF_PACKET;
 	saddr.sll_ifindex = ifindex;
 
-	if (::bind(fd, reinterpret_cast<sockaddr *>(&saddr), sizeof(saddr)) < 0) {
+	if (::bind(fd, reinterpret_cast<sockaddr*>(&saddr), sizeof(saddr)) < 0) {
 		throw_errno("bind(AF_PACKET)");
 	}
 
 	// enable multicast reception
-	packet_mreq mreq = { ifindex, PACKET_MR_ALLMULTI, 0 };
+	packet_mreq mreq = {ifindex, PACKET_MR_ALLMULTI, 0};
 	if (setsockopt(fd, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &mreq, sizeof mreq) < 0) {
 		throw_errno("setsockopt(PACKET_ADD_MEMBERSHIP)");
 	}
@@ -83,7 +85,6 @@ void Netserver_AFPacket::bind(const std::string& ifname)
 	if (setsockopt(fd, SOL_PACKET, PACKET_FANOUT, &fanout, sizeof fanout) < 0) {
 		throw_errno("setsockopt(PACKET_FANOUT)");
 	}
-
 }
 
 Netserver_AFPacket::~Netserver_AFPacket()
@@ -114,7 +115,7 @@ void Netserver_AFPacket::rxring(size_t frame_bits, size_t frame_nr)
 		throw_errno("PacketSocket::rx_ring_enable(PACKET_RX_RING)");
 	}
 
-	void *p = ::mmap(NULL, map_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_LOCKED, fd, 0);
+	void* p = ::mmap(NULL, map_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_LOCKED, fd, 0);
 	if (p == MAP_FAILED) {
 		throw_errno("mmap");
 	}
@@ -126,13 +127,14 @@ void Netserver_AFPacket::rxring(size_t frame_bits, size_t frame_nr)
 
 void Netserver_AFPacket::recv(NetserverPacket& p) const
 {
-	auto* addr = reinterpret_cast<const sockaddr_ll*>(p.addr);
+	auto*    addr = reinterpret_cast<const sockaddr_ll*>(p.addr);
 	uint16_t ethertype = ntohs(addr->sll_protocol);
 	p.l3 = ethertype;
 	dispatch(p, ethertype);
 }
 
-void Netserver_AFPacket::send(NetserverPacket& p, const std::vector<iovec>& iovs, size_t iovlen) const
+void Netserver_AFPacket::send(NetserverPacket& p, const std::vector<iovec>& iovs,
+			      size_t iovlen) const
 {
 	msghdr msg;
 
@@ -156,7 +158,7 @@ bool Netserver_AFPacket::next(int timeout)
 		throw std::runtime_error("AF_PACKET rx_ring not enabled");
 	}
 
-	auto frame = map + rx_current * req.tp_frame_size;
+	auto  frame = map + rx_current * req.tp_frame_size;
 	auto& hdr = *reinterpret_cast<tpacket_hdr*>(frame);
 
 	if ((hdr.tp_status & TP_STATUS_USER) == 0) {
@@ -174,12 +176,9 @@ bool Netserver_AFPacket::next(int timeout)
 	}
 
 	try {
-		NetserverPacket packet(
-			frame + hdr.tp_net,
-			hdr.tp_len,
-			reinterpret_cast<const sockaddr *>(frame + ll_offset),
-			sizeof(sockaddr_ll)
-		);
+		NetserverPacket packet(frame + hdr.tp_net, hdr.tp_len,
+				       reinterpret_cast<const sockaddr*>(frame + ll_offset),
+				       sizeof(sockaddr_ll));
 
 		recv(packet);
 

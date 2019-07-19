@@ -7,11 +7,11 @@
  *
  */
 
-#include <iostream>
-#include <iomanip>
 #include <algorithm>
-#include <system_error>
 #include <cerrno>
+#include <iomanip>
+#include <iostream>
+#include <system_error>
 
 #include <arpa/inet.h>
 
@@ -50,15 +50,16 @@ void hexdump(std::ostream& os, const void* buf, size_t n)
 		auto j = 0U, x = i;
 
 		os << setw(4) << setfill('0') << i << " ";
-		for ( ; j < 16 && x < n; ++j, ++x) {
+		for (; j < 16 && x < n; ++j, ++x) {
 			os << setw(2) << (uint16_t)p[x] << " ";
 		}
-		for ( ; j < 16; ++j) {
+		for (; j < 16; ++j) {
 			os << "   ";
 		}
 
-		j = 0; x = i;
-		for ( ; j < 16 && x < n; ++j, ++x) {
+		j = 0;
+		x = i;
+		for (; j < 16 && x < n; ++j, ++x) {
 			auto c = p[x];
 			if (c < ' ' || c > 127) c = '.';
 			os << c;

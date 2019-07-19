@@ -7,20 +7,20 @@
  *
  */
 
-#include <iostream>
-#include <sstream>
-#include <cstring>
-#include <vector>
 #include <algorithm>
-#include <random>
 #include <chrono>
+#include <cstring>
+#include <iostream>
+#include <random>
+#include <sstream>
+#include <vector>
 
-#include <syslog.h>
 #include <arpa/inet.h>
 #include <netinet/ip6.h>
+#include <syslog.h>
 
-#include "ipv6.h"
 #include "checksum.h"
+#include "ipv6.h"
 
 std::ostream& operator<<(std::ostream& os, const in6_addr& addr)
 {
@@ -30,7 +30,7 @@ std::ostream& operator<<(std::ostream& os, const in6_addr& addr)
 
 in6_addr Netserver_IPv6::ether_to_link_local(const ether_addr& ether)
 {
-	in6_addr ll = { 0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xfe, 0, 0, 0 };
+	in6_addr ll = {0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xfe, 0, 0, 0};
 
 	auto& a = ll.s6_addr;
 	auto& e = ether.ether_addr_octet;
@@ -48,20 +48,17 @@ in6_addr Netserver_IPv6::ether_to_link_local(const ether_addr& ether)
 static size_t payload_length(const std::vector<iovec>& iov)
 {
 	return std::accumulate(iov.cbegin() + 1, iov.cend(), 0U,
-		[](size_t a, const iovec& b) {
-			return a + b.iov_len;
-		}
-	);
+			       [](size_t a, const iovec& b) { return a + b.iov_len; });
 }
 
-void Netserver_IPv6::send_fragment(NetserverPacket& p,
-	uint16_t offset, uint16_t chunk,
-	const std::vector<iovec>& iovs_in, size_t iovlen, bool mf) const
+void Netserver_IPv6::send_fragment(NetserverPacket& p, uint16_t offset, uint16_t chunk,
+				   const std::vector<iovec>& iovs_in, size_t iovlen, bool mf) const
 {
 	// access the memory set aside for the header and fragment EH
-	WriteBuffer out(reinterpret_cast<uint8_t*>(iovs_in[0].iov_base), sizeof(ip6_hdr) + sizeof(ip6_frag));	// FIXME
-	auto& ip6 = out.reserve<ip6_hdr>();
-	auto& frag = out.reserve<ip6_frag>();
+	WriteBuffer out(reinterpret_cast<uint8_t*>(iovs_in[0].iov_base),
+			sizeof(ip6_hdr) + sizeof(ip6_frag)); // FIXME
+	auto&       ip6 = out.reserve<ip6_hdr>();
+	auto&       frag = out.reserve<ip6_frag>();
 
 	// calculate offsets and populate headers
 	ip6.ip6_plen = htons(chunk + sizeof frag);
@@ -75,18 +72,21 @@ void Netserver_IPv6::send_fragment(NetserverPacket& p,
 	}
 }
 
-void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen) const
+void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
+			  size_t iovlen) const
 {
 	// thread local RNG for generating IPv6 IDs
-	thread_local auto rnd = std::mt19937(std::chrono::system_clock::now().time_since_epoch().count() + 1);
+	thread_local auto rnd =
+	    std::mt19937(std::chrono::system_clock::now().time_since_epoch().count() + 1);
 
 	// determine maximum payload fragment size
-	auto mtu = 1500U;						// FIXME: s.getmtu();
+	auto mtu = 1500U; // FIXME: s.getmtu();
 	auto len = payload_length(iovs_in);
 
 	// access the memory set aside for the header and fragment EH
-	WriteBuffer out(reinterpret_cast<uint8_t*>(iovs_in[0].iov_base), sizeof(ip6_hdr) + sizeof(ip6_frag));	// FIXME
-	auto& ip6_out = out.reserve<ip6_hdr>();
+	WriteBuffer out(reinterpret_cast<uint8_t*>(iovs_in[0].iov_base),
+			sizeof(ip6_hdr) + sizeof(ip6_frag)); // FIXME
+	auto&       ip6_out = out.reserve<ip6_hdr>();
 
 	// if it fits don't fragment it
 	if (len + sizeof(ip6_hdr) < mtu) {
@@ -120,8 +120,8 @@ void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 	while (iter != iovs.end()) {
 
 		auto& vec = *iter++;
-		auto base = reinterpret_cast<uint8_t*>(vec.iov_base);
-		auto len = vec.iov_len;
+		auto  base = reinterpret_cast<uint8_t*>(vec.iov_base);
+		auto  len = vec.iov_len;
 		chunk += len;
 
 		// did we take too much?
@@ -141,12 +141,13 @@ void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 
 			// and insert a new iovec after this one that holds the left-overs
 			// assignment necessary in case old iterator is invalidated
-			iter = iovs.insert(iter, iovec { base + vec.iov_len, len - vec.iov_len});
+			iter = iovs.insert(iter, iovec{base + vec.iov_len, len - vec.iov_len});
 
 			// send fragment with MF bit
 			send_fragment(p, offset, chunk, iovs, iter - iovs.cbegin(), true);
 
-			// remove the already transmitted iovecs (excluding the IPv6 header and Fragment EH)
+			// remove the already transmitted iovecs (excluding the IPv6 header and
+			// Fragment EH)
 			iter = iovs.erase(iovs.begin() + 1, iter);
 
 			// start collecting the next chunk
@@ -161,7 +162,8 @@ void Netserver_IPv6::send(NetserverPacket& p, const std::vector<iovec>& iovs_in,
 
 static bool match_solicited(const std::vector<in6_addr>& list, const in6_addr& addr)
 {
-	static const in6_addr solicit_prefix = { 0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0xff, 0, 0, 0 };
+	static const in6_addr solicit_prefix = {0xff, 0x02, 0, 0,    0,    0, 0, 0,
+						0,    0,    0, 0x01, 0xff, 0, 0, 0};
 
 	if (::memcmp(&addr, &solicit_prefix, 13) != 0) return false;
 
@@ -192,11 +194,8 @@ static uint8_t skip_extension_headers(NetserverPacket& p, uint8_t next)
 	}
 
 	// recognized IPv6 extension headers
-	if (next != IPPROTO_HOPOPTS &&
-	    next != IPPROTO_DSTOPTS &&
-	    next != IPPROTO_ROUTING &&
-	    next != IPPROTO_MH)
-	{
+	if (next != IPPROTO_HOPOPTS && next != IPPROTO_DSTOPTS && next != IPPROTO_ROUTING &&
+	    next != IPPROTO_MH) {
 		return next;
 	}
 
@@ -210,7 +209,7 @@ static uint8_t skip_extension_headers(NetserverPacket& p, uint8_t next)
 	if (in.available() < optlen) {
 		return IPPROTO_NONE;
 	}
-	(void) in.read<uint8_t>(optlen);
+	(void)in.read<uint8_t>(optlen);
 
 	// pass back to the main parser
 	return next;
@@ -219,7 +218,7 @@ static uint8_t skip_extension_headers(NetserverPacket& p, uint8_t next)
 void Netserver_IPv6::recv(NetserverPacket& p) const
 {
 	ReadBuffer& in = p.readbuf;
-	auto start_pos = in.position(); // for AF_PACKET bug below
+	auto	start_pos = in.position(); // for AF_PACKET bug below
 
 	// extract L3 header
 	if (in.available() < sizeof(ip6_hdr)) return;
@@ -237,7 +236,7 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 		if (len < 46) {
 			if (len < pos) return;
 			in = ReadBuffer(&in[0], len);
-			(void) in.read<uint8_t>(pos);
+			(void)in.read<uint8_t>(pos);
 		}
 	}
 
@@ -254,9 +253,9 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 	if (!registered(next)) return;
 
 	// IPv6 header, allowing space for a fragment EH to be added
-	uint8_t buffer[sizeof(ip6_hdr) + sizeof(ip6_frag)];
+	uint8_t     buffer[sizeof(ip6_hdr) + sizeof(ip6_frag)];
 	WriteBuffer out(buffer, sizeof buffer);
-	auto& ip6_out = out.reserve<ip6_hdr>();
+	auto&       ip6_out = out.reserve<ip6_hdr>();
 
 	ip6_out.ip6_flow = ip6_in.ip6_flow;
 	ip6_out.ip6_plen = 0;
@@ -282,7 +281,6 @@ void Netserver_IPv6::recv(NetserverPacket& p) const
 	dispatch(p, next);
 }
 
-Netserver_IPv6::Netserver_IPv6(const std::vector<in6_addr>& addr)
-	: addr(addr)
+Netserver_IPv6::Netserver_IPv6(const std::vector<in6_addr>& addr) : addr(addr)
 {
 }

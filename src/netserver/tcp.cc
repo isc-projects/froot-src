@@ -7,28 +7,25 @@
  *
  */
 
-#include <random>
 #include <chrono>
+#include <random>
 
 #include <netinet/ip.h>
 
-#include "netserver.h"
 #include "checksum.h"
+#include "netserver.h"
 #include "tcp.h"
 
 static size_t payload_length(const std::vector<iovec>& iov)
 {
 	return std::accumulate(iov.cbegin() + 1, iov.cend(), 0U,
-		[](size_t a, const iovec& b) {
-			return a + b.iov_len;
-		}
-	);
+			       [](size_t a, const iovec& b) { return a + b.iov_len; });
 }
 
 struct __attribute__((packed)) tcp_mss_opt {
-	uint8_t		type;
-	uint8_t		len;
-	uint16_t	mss;
+	uint8_t  type;
+	uint8_t  len;
+	uint16_t mss;
 };
 
 static void tcp_checksum(NetserverPacket p, std::vector<iovec>& iov)
@@ -54,10 +51,11 @@ static void tcp_checksum(NetserverPacket p, std::vector<iovec>& iov)
 
 void Netserver_TCP::send_flags(NetserverPacket& p, uint8_t flags) const
 {
-	thread_local auto rnd = std::mt19937(std::chrono::system_clock::now().time_since_epoch().count());
+	thread_local auto rnd =
+	    std::mt19937(std::chrono::system_clock::now().time_since_epoch().count());
 
 	// generate TCP outbound header from inbound header
-	auto& tcp = *reinterpret_cast<tcphdr*>(p.iovs[1].iov_base);	// FIXME
+	auto& tcp = *reinterpret_cast<tcphdr*>(p.iovs[1].iov_base); // FIXME
 
 	uint32_t ack = ntohl(tcp.th_ack);
 	uint32_t seq = ntohl(tcp.th_seq);
@@ -79,7 +77,7 @@ void Netserver_TCP::send_flags(NetserverPacket& p, uint8_t flags) const
 //
 void Netserver_TCP::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, size_t iovlen) const
 {
-	uint16_t acked = p.readbuf.position() - p.iovs[0].iov_len - p.iovs[1].iov_len;	// FIXME
+	uint16_t acked = p.readbuf.position() - p.iovs[0].iov_len - p.iovs[1].iov_len; // FIXME
 
 	// copy iovs so we can mutate them
 	auto iovs = iovs_in;
@@ -95,11 +93,11 @@ void Netserver_TCP::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, 
 	tcp.th_flags = TH_ACK;
 
 	// use a copy of the vector because send_ipv4() will mutate it
-	std::vector<iovec> out = { iovs[0], iovs[1] };
+	std::vector<iovec> out = {iovs[0], iovs[1]};
 	out.reserve(5);
 
 	// state variables
-	auto segment = 0U;
+	auto     segment = 0U;
 	uint16_t mss = 1220; // FIXME: s.getmss();
 
 	auto iter = iovs.begin() + 2;
@@ -127,7 +125,7 @@ void Netserver_TCP::send(NetserverPacket& p, const std::vector<iovec>& iovs_in, 
 			// insert a new iovec in the input list that holds the left-overs
 			// assignment necessary in case old iterator is invalidated
 			auto base = reinterpret_cast<uint8_t*>(vec.iov_base);
-			iter = iovs.insert(iter, iovec { base + vec.iov_len, len - vec.iov_len});
+			iter = iovs.insert(iter, iovec{base + vec.iov_len, len - vec.iov_len});
 
 			// send segment, remembering current layer ready for next segment
 			tcp_checksum(p, out);
@@ -175,10 +173,10 @@ void Netserver_TCP::recv(NetserverPacket& p) const
 
 	// skip any options
 	if (in.available() < skip) return;
-	(void) in.read<uint8_t>(skip);
+	(void)in.read<uint8_t>(skip);
 
 	// create buffer large enough for a TCP header and MSS option
-	uint8_t buf[sizeof(tcp_in) + sizeof(tcp_mss_opt)];
+	uint8_t     buf[sizeof(tcp_in) + sizeof(tcp_mss_opt)];
 	WriteBuffer out(buf, sizeof(buf));
 
 	// copy the TCP header, swapping source and dest ports
@@ -191,7 +189,7 @@ void Netserver_TCP::recv(NetserverPacket& p) const
 
 	// add MSS option on initial syn
 	if (tcp_in.th_flags & TH_SYN) {
-		tcp_mss_opt opt = { TCP_MAXSEG, 4, htons(1220) }; // FIXME: s.getmss();
+		tcp_mss_opt opt = {TCP_MAXSEG, 4, htons(1220)}; // FIXME: s.getmss();
 		out.write<tcp_mss_opt>(opt);
 	}
 

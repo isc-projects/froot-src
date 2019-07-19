@@ -39,11 +39,11 @@ RRList RRList::operator+(const RRList& rhs) const
 {
 	RRList result;
 
-	for (auto rr: _list) {
+	for (auto rr : _list) {
 		result._list.push_back(rr);
 	}
 
-	for (auto rr: rhs._list) {
+	for (auto rr : rhs._list) {
 		result._list.push_back(rr);
 	}
 
@@ -57,7 +57,7 @@ RRList::RRList(const ldns_dnssec_rrsets* rrs)
 
 RRList::RRList(const RRList& rhs)
 {
-	for (auto rr: rhs._list) {
+	for (auto rr : rhs._list) {
 		_list.push_back(rr);
 	}
 }

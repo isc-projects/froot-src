@@ -16,13 +16,13 @@
 class Netserver_ICMP : public NetserverLayer {
 
 public:
-	Netserver_ICMP() {};
+	Netserver_ICMP(){};
 
-	void attach(NetserverLayer& parent) {
+	void attach(NetserverLayer& parent)
+	{
 		NetserverLayer::attach(parent, IPPROTO_ICMP);
 	}
 
 public:
-	void recv(NetserverPacket &p) const override;
-
+	void recv(NetserverPacket& p) const override;
 };

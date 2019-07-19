@@ -9,23 +9,22 @@
 
 #pragma once
 
+#include <arpa/inet.h>
 #include <cstddef>
 #include <cstdint>
 #include <sys/socket.h>
-#include <arpa/inet.h>
 
 class Checksum {
 
 private:
 	uint32_t sum = 0;
-	bool	 odd = false;
+	bool     odd = false;
 
 public:
 	Checksum& add(const void* p, size_t len);
 	Checksum& add(const iovec& iov);
 	Checksum& add(uint16_t n);
-	uint16_t value() const;
-
+	uint16_t  value() const;
 };
 
 inline uint16_t Checksum::value() const

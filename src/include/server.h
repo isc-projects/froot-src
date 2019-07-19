@@ -15,14 +15,15 @@
 class DNSServer : public NetserverLayer {
 
 private:
-	Zone			zone;
+	Zone zone;
 
 private:
 	void loader_thread(std::string filename, bool compress);
 
 public:
 	void recv(NetserverPacket& p) const;
-	void attach(NetserverLayer& parent, uint16_t port = 53) {
+	void attach(NetserverLayer& parent, uint16_t port = 53)
+	{
 		NetserverLayer::attach(parent, port);
 	}
 

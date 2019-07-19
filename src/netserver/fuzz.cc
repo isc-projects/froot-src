@@ -11,8 +11,8 @@
 #include <iostream>
 #include <stdexcept>
 
-#include <unistd.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 #include <net/ethernet.h>
 

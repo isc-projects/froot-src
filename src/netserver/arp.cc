@@ -49,7 +49,7 @@ void Netserver_ARP::recv(NetserverPacket& p) const
 	// extract the remaining variable length fields
 	auto sha = in.read<ether_addr>();
 	auto spa = in.read<in_addr>();
-	(void) in.read<ether_addr>();
+	(void)in.read<ether_addr>();
 	auto tip = in.read<in_addr>();
 
 	// it's not for us
@@ -57,7 +57,7 @@ void Netserver_ARP::recv(NetserverPacket& p) const
 
 	// generate reply packet
 	uint8_t reply[28];
-	auto out = WriteBuffer(reply, sizeof reply);
+	auto    out = WriteBuffer(reply, sizeof reply);
 
 	auto& hdr_out = out.write<arphdr>(hdr);
 	hdr_out.ar_op = htons(ARPOP_REPLY);

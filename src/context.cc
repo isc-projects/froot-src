@@ -7,21 +7,21 @@
  *
  */
 
-#include <string>
-#include <cstring>
 #include <arpa/inet.h>
+#include <cstring>
+#include <string>
 
 #include "context.h"
-#include "zone.h"
 #include "util.h"
+#include "zone.h"
 
 struct dnshdr {
-	uint16_t	id;
-	uint16_t	flags;
-	uint16_t	qdcount;
-	uint16_t	ancount;
-	uint16_t	nscount;
-	uint16_t	arcount;
+	uint16_t id;
+	uint16_t flags;
+	uint16_t qdcount;
+	uint16_t ancount;
+	uint16_t nscount;
+	uint16_t arcount;
 };
 
 static bool valid_header(const dnshdr& h)
@@ -75,7 +75,7 @@ static bool parse_name(ReadBuffer& in, std::string& name, uint8_t& labels)
 		// check maximum name length
 		int label_length = c;
 		total += label_length;
-		total += 1;		// count length byte too
+		total += 1; // count length byte too
 
 		if (total > 255) {
 			return false;
@@ -85,7 +85,7 @@ static bool parse_name(ReadBuffer& in, std::string& name, uint8_t& labels)
 		if (in.available() < c) {
 			return false;
 		} else {
-			(void) in.read<uint8_t>(c);
+			(void)in.read<uint8_t>(c);
 		}
 	}
 
@@ -132,7 +132,7 @@ void Context::parse_edns(ReadBuffer& in)
 		bufsize = 512;
 	}
 
-	(void) in.read<uint8_t>();	// extended rcode
+	(void)in.read<uint8_t>(); // extended rcode
 	auto version = in.read<uint8_t>();
 	auto flags = ntohs(in.read<uint16_t>());
 	auto rdlen = ntohs(in.read<uint16_t>());
@@ -144,7 +144,7 @@ void Context::parse_edns(ReadBuffer& in)
 	}
 
 	// skip the EDNS options
-	(void) in.read<uint8_t>(rdlen);
+	(void)in.read<uint8_t>(rdlen);
 
 	// we got a valid EDNS opt RR, so we need to return one
 	has_edns = true;
@@ -152,7 +152,7 @@ void Context::parse_edns(ReadBuffer& in)
 
 	// check for EDNS version
 	if (version > 0) {
-		rcode = 16;	// BADVER
+		rcode = 16; // BADVER
 	}
 }
 
@@ -237,12 +237,12 @@ void Context::build_response(ReadBuffer& in, const Answer* answer, std::vector<i
 	// handle truncation
 	bool tc_bit = !tcp && (total_len > bufsize);
 	if (tc_bit) {
-		answer = Answer::empty;		// NB: initially includes OPT RR
+		answer = Answer::empty; // NB: initially includes OPT RR
 	}
 
 	// output the framing header for TCP
 	if (tcp) {
-		(void) head.write<uint16_t>(htons(total_len));
+		(void)head.write<uint16_t>(htons(total_len));
 	}
 
 	// craft response header
@@ -250,15 +250,15 @@ void Context::build_response(ReadBuffer& in, const Answer* answer, std::vector<i
 	tx_hdr.id = rx_id;
 
 	// response flags
-	bool aa_bit = answer->authoritative();
-	uint16_t flags = rx_flags & 0x7800;	// copy OpCode
-	if (!flags) {				// if Query
-		flags |= (rx_flags & 0x0110);	// copy RD + CD
+	bool     aa_bit = answer->authoritative();
+	uint16_t flags = rx_flags & 0x7800;   // copy OpCode
+	if (!flags) {			      // if Query
+		flags |= (rx_flags & 0x0110); // copy RD + CD
 	}
-	flags |= 0x8000;			// QR
-	flags |= (rcode & 0x0f);		// set rcode
-	flags |= 0x0200 * tc_bit;		// TC bit
-	flags |= 0x0400 * aa_bit;		// AA bit
+	flags |= 0x8000;	  // QR
+	flags |= (rcode & 0x0f);  // set rcode
+	flags |= 0x0200 * tc_bit; // TC bit
+	flags |= 0x0400 * aa_bit; // AA bit
 	tx_hdr.flags = htons(flags);
 
 	// section counts
@@ -272,11 +272,13 @@ void Context::build_response(ReadBuffer& in, const Answer* answer, std::vector<i
 	out.push_back(head);
 
 	// get the data buffer for the answer
-	iovec payload = (answer == Answer::empty) ? *answer : answer->data_offset_by(qdsize, _an_buf);
+	iovec payload =
+	    (answer == Answer::empty) ? *answer : answer->data_offset_by(qdsize, _an_buf);
 
 	if (has_edns) {
 		// Fixup the extended rcode
-		auto* p = reinterpret_cast<uint8_t*>(payload.iov_base) + payload.iov_len - sizeof(edns_opt_rr);
+		auto* p = reinterpret_cast<uint8_t*>(payload.iov_base) + payload.iov_len -
+			  sizeof(edns_opt_rr);
 		auto& edns = *reinterpret_cast<edns_opt_rr*>(p);
 		edns.ercode = (rcode >> 4);
 	} else {
@@ -356,7 +358,7 @@ Answer::Type Context::type() const
 		} else {
 			return Answer::Type::tld_referral;
 		}
-	} else  {
+	} else {
 		if (qtype == LDNS_RR_TYPE_SOA) {
 			return Answer::Type::root_soa;
 		} else if (qtype == LDNS_RR_TYPE_NS) {
@@ -377,7 +379,7 @@ Answer::Type Context::type() const
 void Context::reset()
 {
 	// clear context variables
-        qname.clear();
+	qname.clear();
 	qtype = 0;
 	qdstart = 0;
 	qdsize = 0;
